@@ -1,0 +1,56 @@
+# Delta Engine — MT5 Worker (Wine/Linux Dockerfile)
+# This allows running the Windows MT5 Terminal and Windows Python on a Mac/Linux host via Docker.
+
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+# Set Wine environment variables
+ENV WINEARCH=win64
+ENV WINEPREFIX=/root/.wine
+ENV DISPLAY=:99
+ENV WINEDEBUG=-all
+
+# Install Wine, Xvfb (virtual display), and required tools
+RUN dpkg --add-architecture i386 && \
+    apt-get update && apt-get install -y --no-install-recommends \
+    wine64 \
+    wine32 \
+    xvfb \
+    wget \
+    ca-certificates \
+    cabextract \
+    winbind \
+    && rm -rf /var/lib/apt/lists/*
+
+# Download and install Windows Python (3.9.13) via Wine
+# We use /quiet to run the installer silently
+RUN wget https://www.python.org/ftp/python/3.9.13/python-3.9.13-amd64.exe && \
+    xvfb-run -a wine python-3.9.13-amd64.exe /quiet InstallAllUsers=1 PrependPath=1 && \
+    rm python-3.9.13-amd64.exe
+
+# Wait for wine prefix to initialize fully
+RUN xvfb-run -a wine boot --init && sleep 5
+
+WORKDIR /worker
+
+# Copy worker requirements
+COPY requirements.txt .
+
+# Install dependencies using the Windows version of Python via Wine
+RUN xvfb-run -a wine python -m pip install --upgrade pip && \
+    xvfb-run -a wine python -m pip install -r requirements.txt
+
+# Copy the rest of the worker code
+COPY . .
+
+# Create a startup script that launches the virtual display and then runs our python script
+RUN echo '#!/bin/bash\n\
+rm -f /tmp/.X99-lock\n\
+Xvfb :99 -screen 0 1024x768x16 &\n\
+sleep 2\n\
+wine python "$@"\n\
+' > /start.sh && chmod +x /start.sh
+
+# Default command (can be overridden)
+ENTRYPOINT ["/start.sh"]
+CMD ["tests/test_connect_mt5.py"]
