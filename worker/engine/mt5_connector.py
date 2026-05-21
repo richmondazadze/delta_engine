@@ -4,9 +4,9 @@ Encapsulates MetaTrader 5 Python integration.
 Provides a clean interface for initializing, logging in, fetching state, and executing orders.
 """
 
-import time
+import math
 import structlog
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Tuple
 
 try:
     import MetaTrader5 as mt5
@@ -25,25 +25,41 @@ class MT5Connector:
         self.terminal_path = terminal_path
         self.connected = False
 
-    def initialize(self) -> bool:
-        """Initialize connection to the MT5 terminal."""
+    def last_error(self) -> Optional[Tuple[int, str]]:
+        if mt5 is None:
+            return None
+        return mt5.last_error()
+
+    def initialize(self, timeout_ms: int = 120_000) -> bool:
+        """Initialize connection to the MT5 terminal and authorize the account."""
         if mt5 is None:
             logger.error("mt5_import_failed", reason="Module not available")
             return False
 
-        init_kwargs = {}
+        init_kwargs: dict = {
+            "login": self.login,
+            "password": self.password,
+            "server": self.server,
+            "timeout": timeout_ms,
+        }
         if self.terminal_path:
-            init_kwargs['path'] = self.terminal_path
+            init_kwargs["path"] = self.terminal_path
 
         if not mt5.initialize(**init_kwargs):
             error = mt5.last_error()
             logger.error("mt5_initialize_failed", error=error)
             return False
-        
+
         return True
 
     def login_account(self) -> bool:
-        """Log in to the specific trading account."""
+        """Log in to the specific trading account (or confirm already logged in)."""
+        info = mt5.account_info()
+        if info is not None and info.login == self.login and info.server == self.server:
+            self.connected = True
+            logger.info("mt5_already_logged_in", login=self.login, server=self.server)
+            return True
+
         if not mt5.login(login=self.login, password=self.password, server=self.server):
             error = mt5.last_error()
             logger.error("mt5_login_failed", login=self.login, server=self.server, error=error)
@@ -82,6 +98,38 @@ class MT5Connector:
                 return None
                 
         return symbol_info._asdict()
+
+    def normalize_lot(self, symbol: str, volume: float) -> Optional[float]:
+        """Round volume to broker min/max/step."""
+        info = self.get_symbol_info(symbol)
+        if not info:
+            return None
+
+        vmin = float(info.get("volume_min", 0.01))
+        vmax = float(info.get("volume_max", 100.0))
+        vstep = float(info.get("volume_step", 0.01))
+
+        volume = max(vmin, min(vmax, volume))
+        if vstep > 0:
+            steps = round((volume - vmin) / vstep)
+            volume = vmin + steps * vstep
+            volume = round(volume, int(max(0, -math.log10(vstep))))
+
+        if volume < vmin:
+            return None
+        return volume
+
+    def _resolve_filling_mode(self, symbol: str) -> int:
+        """Pick a supported order filling mode for the symbol."""
+        info = self.get_symbol_info(symbol)
+        if not info:
+            return mt5.ORDER_FILLING_IOC
+        filling = int(info.get("filling_mode", 0))
+        if filling & mt5.ORDER_FILLING_IOC:
+            return mt5.ORDER_FILLING_IOC
+        if filling & mt5.ORDER_FILLING_FOK:
+            return mt5.ORDER_FILLING_FOK
+        return mt5.ORDER_FILLING_RETURN
 
     def get_open_positions(self) -> List[Dict[str, Any]]:
         """Fetch all open positions."""
@@ -123,7 +171,7 @@ class MT5Connector:
             "magic": magic,
             "comment": "Delta Engine Copy",
             "type_time": mt5.ORDER_TIME_GTC,
-            "type_filling": mt5.ORDER_FILLING_IOC, # Using IOC as it's universally supported by most brokers
+            "type_filling": self._resolve_filling_mode(symbol),
         }
 
         result = mt5.order_send(request)
@@ -165,7 +213,7 @@ class MT5Connector:
             "magic": position.magic,
             "comment": "Delta Engine Close",
             "type_time": mt5.ORDER_TIME_GTC,
-            "type_filling": mt5.ORDER_FILLING_IOC,
+            "type_filling": self._resolve_filling_mode(symbol),
         }
 
         result = mt5.order_send(request)
@@ -174,4 +222,30 @@ class MT5Connector:
             return result._asdict()
 
         logger.info("mt5_close_position_success", ticket=ticket, symbol=symbol)
+        return result._asdict()
+
+    def modify_position(
+        self, ticket: int, sl: float = 0.0, tp: float = 0.0
+    ) -> Optional[Dict[str, Any]]:
+        """Modify SL/TP on an open position."""
+        position = mt5.positions_get(ticket=ticket)
+        if position is None or len(position) == 0:
+            logger.error("mt5_modify_position_not_found", ticket=ticket)
+            return None
+
+        pos = position[0]
+        request = {
+            "action": mt5.TRADE_ACTION_SLTP,
+            "position": ticket,
+            "symbol": pos.symbol,
+            "sl": float(sl),
+            "tp": float(tp),
+        }
+
+        result = mt5.order_send(request)
+        if result.retcode != mt5.TRADE_RETCODE_DONE:
+            logger.error("mt5_modify_position_failed", result=result._asdict())
+            return result._asdict()
+
+        logger.info("mt5_modify_position_success", ticket=ticket, sl=sl, tp=tp)
         return result._asdict()

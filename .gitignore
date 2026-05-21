@@ -1,0 +1,32 @@
+# Environment and secrets
+.env
+.env.local
+worker/config/accounts.yaml
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+.venv/
+env/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.ruff_cache/
+
+# Worker runtime
+worker/logs/
+worker/config/accounts.yaml
+
+# IDE
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# Logs
+*.log

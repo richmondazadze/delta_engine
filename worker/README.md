@@ -1,49 +1,71 @@
-# Delta Engine — MT5 Worker Testing
+# Delta Engine — MT5 Worker
 
-This directory contains the Python worker engine and the Phase 1 MVP test scripts.
-Because the `MetaTrader5` Python library uses native Windows DLLs, **this code must be executed on a Windows machine** (or a Windows VM / VPS) where the MetaTrader 5 terminal is installed.
+Python engine for MetaTrader 5: connect, detect trades, copy to followers.
 
-## Setup Instructions (Windows)
+**Must run on Windows** with MT5 terminal installed.
 
-1. **Install Python 3.9+** on your Windows machine.
-2. **Install MetaTrader 5 Terminal** and log in to at least one demo account.
-3. Copy this `worker` folder to your Windows machine.
-4. Open a command prompt or PowerShell in the `worker` folder and create a virtual environment:
-   ```cmd
-   python -m venv venv
-   venv\Scripts\activate
-   pip install -r requirements.txt
-   ```
+## Setup
 
-## Running the Tests
+From repo root:
 
-Make sure your MT5 terminal is running (or it will be launched automatically by the scripts if the path is in the default location).
+```powershell
+..\setup.ps1
+```
 
-Run the scripts in the following order to validate the Phase 1 requirements:
+Edit `config/accounts.yaml` with your demo credentials.
 
-1. **Test Connection & Account Info**
-   ```cmd
-   python tests\test_connect_mt5.py
-   ```
-   *Expected:* Connects to MT5, logs in, and prints your balance and open positions.
+**Important:** Use the **worker** venv, not the backend venv. Backend Python does not include `MetaTrader5`.
 
-2. **Test Placing an Order**
-   ```cmd
-   python tests\test_place_order.py
-   ```
-   *Expected:* Opens a market buy or sell order on the specified symbol.
+```powershell
+cd worker
+.\venv\Scripts\Activate.ps1   # prompt should show worker\venv
+where python                  # must point to worker\venv\Scripts\python.exe
+```
 
-3. **Test Closing an Order**
-   ```cmd
-   python tests\test_close_order.py
-   ```
-   *Expected:* Lists your open positions and allows you to select one to close.
+Or run without activating:
 
-4. **Test Real-Time Position Detection**
-   ```cmd
-   python tests\test_detect_positions.py
-   ```
-   *Expected:* Starts a polling loop. Go to your MT5 terminal and manually open or close a trade. The script should immediately print `🔥 NEW TRADE DETECTED` or `🛑 TRADE CLOSED`.
+```powershell
+.\run.ps1 scripts\01_connect_account.py -a master-1
+```
 
----
-*Note: Make sure "Allow Auto Trading" (Algo Trading) is enabled in your MT5 terminal settings (Tools -> Options -> Expert Advisors).*
+## Pathway (run in order)
+
+```powershell
+cd worker
+.\venv\Scripts\Activate.ps1
+
+python scripts\01_connect_account.py -a master-1
+python scripts\02_confirm_connected.py -a master-1
+python scripts\03_register_master.py
+python scripts\04_register_followers.py
+python scripts\06_detect_master_trade.py    # open a trade in MT5 to test
+python scripts\09_run_copier_loop.py        # full copy loop
+```
+
+## Engine modules
+
+| Module | Role |
+|--------|------|
+| `mt5_connector.py` | MT5 API wrapper |
+| `account_session.py` | Connect, health, confirm |
+| `state_diff.py` | Position change detection |
+| `signal.py` | Normalized `TradeSignal` |
+| `lot_sizer.py` | Fixed / multiplier lots |
+| `symbol_mapper.py` | Master → follower symbols |
+| `ticket_mapper.py` | Master/follower ticket map |
+| `follower_executor.py` | Execute copy actions |
+| `copier_engine.py` | Main poll + dispatch loop |
+| `execution_log.py` | Local JSONL audit log |
+
+## Logs
+
+`logs/execution_events.jsonl` — dev execution audit (before Supabase).
+
+## Legacy tests
+
+Original interactive tests still work:
+
+- `tests/test_connect_mt5.py`
+- `tests/test_place_order.py`
+- `tests/test_close_order.py`
+- `tests/test_detect_positions.py`
