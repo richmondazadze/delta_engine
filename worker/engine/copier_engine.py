@@ -105,7 +105,7 @@ class CopierEngine:
                 for signal in signals:
                     logger.info(
                         "signal_detected",
-                        event=signal.event_type,
+                        event_type=signal.event_type,
                         ticket=signal.ticket,
                         symbol=signal.symbol,
                     )

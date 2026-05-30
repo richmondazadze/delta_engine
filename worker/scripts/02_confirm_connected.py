@@ -15,7 +15,7 @@ from engine.account_session import AccountSession
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--account", "-a", required=True)
-    parser.add_argument("--symbol", "-s", default="EURUSD")
+    parser.add_argument("--symbol", "-s", default="EURUSDm")
     args = parser.parse_args()
 
     cfg = get_account(load_accounts(), args.account)
