@@ -11,6 +11,7 @@ from app.api.copiers import router as copiers_router
 from app.api.risk import router as risk_router
 from app.api.execution import router as execution_router
 from app.api.internal_workers import router as internal_router
+from app.api.internal_runtime import router as internal_runtime_router
 import structlog
 
 structlog.configure(
@@ -43,6 +44,7 @@ app.include_router(copiers_router)
 app.include_router(risk_router)
 app.include_router(execution_router)
 app.include_router(internal_router)
+app.include_router(internal_runtime_router)
 
 
 @app.get("/health")

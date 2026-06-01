@@ -3,14 +3,26 @@ Delta Engine — Application Configuration
 Loads environment variables with validation and defaults.
 """
 
-from pydantic_settings import BaseSettings
+from pathlib import Path
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field
 from typing import List
 from functools import lru_cache
 
+REPO_ROOT = Path(__file__).resolve().parents[3]
+ROOT_ENV_FILE = REPO_ROOT / ".env"
+
 
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
+
+    model_config = SettingsConfigDict(
+        env_file=str(ROOT_ENV_FILE) if ROOT_ENV_FILE.exists() else ".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        extra="ignore",
+    )
 
     # ---- App ----
     app_name: str = "Delta Engine"
@@ -32,6 +44,9 @@ class Settings(BaseSettings):
     # ---- Encryption ----
     encryption_key: str = Field(..., alias="ENCRYPTION_KEY")
 
+    # ---- Worker internal auth ----
+    worker_api_key: str = Field(..., alias="WORKER_API_KEY")
+
     # ---- Stripe ----
     stripe_secret_key: str = Field(default="", alias="STRIPE_SECRET_KEY")
     stripe_webhook_secret: str = Field(default="", alias="STRIPE_WEBHOOK_SECRET")
@@ -44,11 +59,6 @@ class Settings(BaseSettings):
     @property
     def is_production(self) -> bool:
         return self.api_env == "production"
-
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        case_sensitive = False
 
 
 @lru_cache()

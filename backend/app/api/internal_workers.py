@@ -7,6 +7,7 @@ POST /internal/execution-events
 import os
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Header
+from app.core.config import get_settings
 from app.core.deps import get_supabase_admin
 from app.models.worker import (
     WorkerRegister,
@@ -23,7 +24,7 @@ router = APIRouter(prefix="/internal", tags=["Internal — Workers"])
 
 
 def verify_worker_key(x_worker_key: str = Header(..., alias="X-Worker-Key")) -> None:
-    expected = os.environ.get("WORKER_API_KEY", "")
+    expected = get_settings().worker_api_key
     if not expected or x_worker_key != expected:
         raise HTTPException(status_code=401, detail="Invalid worker API key")
 

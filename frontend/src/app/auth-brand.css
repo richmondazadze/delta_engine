@@ -1,0 +1,18 @@
+/* CopyMorphic auth — brand tokens + sharp corners (auth-4 layout) */
+
+.auth-page {
+  --brand: #00897b;
+  --brand-press: #00695c;
+  --brand-tint: #e0f2f0;
+  --primary: var(--brand);
+  --primary-foreground: #ffffff;
+  --ring: var(--brand);
+  --accent: var(--brand-tint);
+  --accent-foreground: var(--brand-press);
+  --radius: 2px;
+  --radius-sm: 2px;
+  --radius-md: 2px;
+  --radius-lg: 2px;
+  --radius-xl: 2px;
+  background: var(--background);
+}

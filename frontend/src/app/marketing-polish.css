@@ -1,0 +1,188 @@
+/* CopyMorphic marketing polish — typography, spacing, transitions */
+
+.marketing-page {
+  --ease-out-strong: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  --radius: 2px;
+  --radius-sm: 2px;
+  --radius-md: 2px;
+  --radius-lg: 2px;
+  --radius-xl: 2px;
+  --brand: #00897b;
+  --brand-press: #00695c;
+  --brand-tint: #e0f2f0;
+  --primary: var(--brand);
+  --primary-foreground: #ffffff;
+  --ring: var(--brand);
+  --accent: var(--brand-tint);
+  --accent-foreground: var(--brand-press);
+}
+
+/* transitions.dev shared tokens */
+.marketing-page {
+  --dropdown-open-dur: 250ms;
+  --dropdown-close-dur: 150ms;
+  --dropdown-pre-scale: 0.97;
+  --dropdown-closing-scale: 0.99;
+  --dropdown-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --panel-open-dur: 400ms;
+  --panel-close-dur: 350ms;
+  --panel-translate-y: 24px;
+  --panel-blur: 2px;
+  --panel-ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.mk-section {
+  padding-block: clamp(5rem, 10vw, 8.5rem);
+}
+
+.mk-section-inner {
+  width: min(72rem, 100% - clamp(1.5rem, 5vw, 3rem));
+  margin-inline: auto;
+}
+
+.mk-section-tight {
+  padding-block: clamp(3rem, 6vw, 5rem);
+}
+
+.mk-kicker {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--brand);
+}
+
+.mk-section-title {
+  font-size: clamp(2rem, 4.5vw, 3.25rem);
+  font-weight: 650;
+  letter-spacing: -0.03em;
+  line-height: 1.08;
+  color: var(--foreground);
+}
+
+.mk-section-lead {
+  font-size: clamp(1.0625rem, 2.1vw, 1.25rem);
+  line-height: 1.65;
+  color: var(--muted-foreground);
+}
+
+.mk-body {
+  font-size: 1.0625rem;
+  line-height: 1.65;
+  color: var(--muted-foreground);
+}
+
+.mk-nav-link {
+  font-size: 1rem;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+.mk-metric-value {
+  font-size: clamp(1.75rem, 3vw, 2.25rem);
+  font-weight: 650;
+  letter-spacing: -0.03em;
+}
+
+.mk-metric-label {
+  margin-top: 0.35rem;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+.mk-metric-detail {
+  margin-top: 0.5rem;
+  font-size: 0.9375rem;
+  line-height: 1.55;
+  color: var(--muted-foreground);
+}
+
+.mk-platform-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 5.5rem;
+  padding: 1.25rem 1.5rem;
+  border: 1px solid var(--border);
+  background: var(--card);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  text-align: center;
+  transition:
+    transform 200ms var(--ease-out-strong),
+    border-color 200ms var(--ease-out-strong),
+    box-shadow 200ms var(--ease-out-strong);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .mk-platform-badge:hover {
+    transform: translateY(-2px);
+    border-color: color-mix(in oklab, var(--brand) 35%, var(--border));
+    box-shadow: 0 8px 24px rgb(0 137 123 / 0.08);
+  }
+}
+
+.mk-platform-badge:active {
+  transform: translateY(0) scale(0.99);
+}
+
+/* transitions.dev — menu dropdown */
+.t-dropdown {
+  transform-origin: top right;
+  transform: scale(var(--dropdown-pre-scale));
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    transform var(--dropdown-open-dur) var(--dropdown-ease),
+    opacity var(--dropdown-open-dur) var(--dropdown-ease);
+  will-change: transform, opacity;
+}
+
+.t-dropdown.is-open {
+  transform: scale(1);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.t-dropdown.is-closing {
+  transform: scale(var(--dropdown-closing-scale));
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    transform var(--dropdown-close-dur) var(--dropdown-ease),
+    opacity var(--dropdown-close-dur) var(--dropdown-ease);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .t-dropdown {
+    transition: none !important;
+  }
+}
+
+/* Emil-style button press + marketing CTA polish */
+.marketing-page [data-slot="button"] {
+  transition:
+    transform 180ms var(--ease-out-strong),
+    box-shadow 180ms var(--ease-out-strong),
+    background-color 180ms var(--ease-out-strong),
+    border-color 180ms var(--ease-out-strong);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .marketing-page [data-slot="button"]:hover:not(:disabled) {
+    transform: translateY(-1px);
+  }
+}
+
+.marketing-page [data-slot="button"]:active:not(:disabled) {
+  transform: translateY(0) scale(0.98);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .marketing-page [data-slot="button"] {
+    transition: none !important;
+  }
+}

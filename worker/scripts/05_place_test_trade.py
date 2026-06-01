@@ -12,6 +12,7 @@ try:
 except ImportError:
     mt5 = None
 
+from engine.env_loader import load_worker_env
 from engine.account_session import AccountSession
 from engine.config_loader import get_account, get_master_accounts, load_accounts
 
@@ -67,4 +68,5 @@ def main():
 
 
 if __name__ == "__main__":
+    load_worker_env()
     raise SystemExit(main())

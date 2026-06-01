@@ -63,7 +63,9 @@ class CopierEngine:
         if master_id:
             masters = [a for a in masters if a.id == master_id]
         if not masters:
-            raise RuntimeError("No enabled master account in config/accounts.yaml")
+            source = os.environ.get("DELTA_CONFIG_SOURCE", "yaml")
+            hint = "config/accounts.yaml" if source == "yaml" else "Supabase runtime config"
+            raise RuntimeError(f"No enabled master account in {hint}")
 
         if len(masters) > 1:
             logger.warning("multiple_masters_using_first", master_id=masters[0].id)
@@ -79,7 +81,15 @@ class CopierEngine:
             master=master_cfg.id,
             copiers=[c.id for c in copier_list],
             poll_ms=self.poll_interval_ms,
+            config_source=os.environ.get("DELTA_CONFIG_SOURCE", "yaml"),
         )
+
+        if os.environ.get("DELTA_CONFIG_SOURCE", "yaml").lower() == "api":
+            from engine.api_client import get_api_client
+
+            client = get_api_client()
+            client.register_worker()
+            client.start_heartbeat_loop()
 
         if not master_session.connect():
             raise RuntimeError(f"Failed to connect master {master_cfg.id}")

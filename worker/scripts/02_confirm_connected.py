@@ -8,6 +8,7 @@ import sys
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+from engine.env_loader import load_worker_env
 from engine.config_loader import get_account, load_accounts
 from engine.account_session import AccountSession
 
@@ -42,4 +43,5 @@ def main():
 
 
 if __name__ == "__main__":
+    load_worker_env()
     raise SystemExit(main())
