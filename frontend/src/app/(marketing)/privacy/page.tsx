@@ -3,7 +3,7 @@ import { APP_NAME, APP_SUPPORT_EMAIL } from "@/lib/brand";
 
 export default function PrivacyPage() {
   return (
-    <main className="mx-auto max-w-3xl px-6 py-16">
+    <main className="mx-auto max-w-3xl px-4 py-12 sm:px-6 sm:py-16">
       <Link href="/" className="text-sm text-muted-foreground hover:text-foreground">
         ← Home
       </Link>

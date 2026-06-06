@@ -89,7 +89,7 @@ export default function BillingPage() {
         <div className="pt">
           <h1>Billing</h1>
           <p className="desc">
-            Per-account pricing — slightly below TradersConnect. You are on{" "}
+            Per-account pricing. You are on{" "}
             <strong>{planLabel}</strong> ({accountLimit} accounts, {followerLimit} copy links).
           </p>
         </div>
@@ -138,7 +138,7 @@ export default function BillingPage() {
             $9<span className="faint" style={{ fontSize: 13, fontWeight: 500 }}>/account/mo</span>
           </div>
           <p className="muted" style={{ fontSize: 12.5, margin: "0 0 12px" }}>
-            Cloud copy, risk rules, logs. (TradersConnect: $10)
+            Cloud copy, risk rules, and execution logs.
           </p>
           <button
             type="button"
@@ -157,7 +157,7 @@ export default function BillingPage() {
             $14<span className="faint" style={{ fontSize: 13, fontWeight: 500 }}>/account/mo</span>
           </div>
           <p className="muted" style={{ fontSize: 12.5, margin: "0 0 12px" }}>
-            Priority routing & support. (TradersConnect: $15)
+            Priority routing and dedicated support.
           </p>
           <button
             type="button"
@@ -176,7 +176,7 @@ export default function BillingPage() {
             $27.99<span className="faint" style={{ fontSize: 13, fontWeight: 500 }}>/mo</span>
           </div>
           <p className="muted" style={{ fontSize: 12.5, margin: "0 0 12px" }}>
-            Portfolio analytics add-on. (TradersConnect: $29.99)
+            Portfolio analytics add-on for deeper performance insight.
           </p>
           <button
             type="button"

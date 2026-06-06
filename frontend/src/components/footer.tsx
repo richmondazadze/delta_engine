@@ -60,7 +60,7 @@ export function Footer() {
 	return (
 		<footer
 			className={cn(
-				"relative mx-auto mt-8 flex w-full max-w-6xl flex-col items-center justify-center border-t px-6 md:mt-16 md:px-8",
+				"relative mx-auto mt-8 flex w-full max-w-6xl flex-col items-center justify-center overflow-x-clip border-t px-4 md:mt-16 md:px-8",
 				"dark:bg-[radial-gradient(35%_128px_at_50%_0%,--theme(--color-foreground/.1),transparent)]",
 			)}
 		>

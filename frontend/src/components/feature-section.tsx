@@ -1,8 +1,7 @@
 import { cn } from "@/lib/utils";
 import type React from "react";
-import { CobeGlobe } from "@/components/cobe-globe";
 import { DashboardPreview } from "@/components/marketing/DashboardPreview";
-import { TrendingUpIcon, SquareMousePointerIcon, GlobeIcon } from "lucide-react";
+import { TrendingUpIcon, SquareMousePointerIcon, LineChartIcon } from "lucide-react";
 
 const features = [
 	{
@@ -34,7 +33,7 @@ const features = [
 
 export function FeatureSection() {
 	return (
-		<div className="relative mx-auto grid w-full max-w-5xl grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-6 md:gap-5">
+		<div className="relative mx-auto grid w-full max-w-5xl grid-cols-1 gap-4 overflow-x-clip sm:grid-cols-2 md:grid-cols-6 md:gap-5">
 			{features.map((feature) => (
 				<FeatureCard className={feature.className} key={feature.id}>
 					{feature.children}
@@ -54,7 +53,7 @@ function FeatureCard({
 	return (
 		<div
 			className={cn(
-				"group relative overflow-hidden rounded-sm border bg-background px-8 pt-8 pb-6",
+				"group relative overflow-hidden rounded-sm border bg-background px-5 pt-6 pb-5 sm:px-8 sm:pt-8 sm:pb-6",
 				className
 			)}
 		>
@@ -125,14 +124,14 @@ function UserBasedSecurity() {
 function ReportsVisual() {
 	return (
 		<>
-			<div className="min-h-32">
-				<div className="absolute top-8 left-8 flex items-center gap-2">
+			<div className="relative min-h-24 overflow-hidden sm:min-h-32">
+				<div className="absolute top-6 left-4 flex items-center gap-2 sm:top-8 sm:left-8">
 					<div className="flex size-8 items-center justify-center rounded-full bg-primary/10 text-primary">
 						<TrendingUpIcon className="size-4" />
 					</div>
 					<div className="font-medium text-muted-foreground">4.5%</div>
 				</div>
-				<ReportsChartsSvg className="translate-x-[5%] -rotate-2 scale-150" />
+				<ReportsChartsSvg className="translate-x-[2%] -rotate-2 scale-110 sm:translate-x-[5%] sm:scale-150" />
 			</div>
 			<div className="relative z-10 mt-8 space-y-2 text-center">
 				<FeatureTitle>Forensic execution logs</FeatureTitle>
@@ -148,7 +147,7 @@ function ReportsVisual() {
 function DashboardVisual() {
 	return (
 		<div className="grid h-full sm:grid-cols-2">
-			<div className="relative z-10 space-y-6 py-8 ps-8 pe-2">
+			<div className="relative z-10 space-y-5 py-6 ps-5 pe-3 sm:space-y-6 sm:py-8 sm:ps-8 sm:pe-2">
 				<div className="flex size-12 items-center justify-center rounded-full border bg-card shadow-xs outline outline-border/80 outline-offset-2">
 					<SquareMousePointerIcon className="size-5 text-primary/80" />
 				</div>
@@ -162,8 +161,8 @@ function DashboardVisual() {
 					</FeatureDescription>
 				</div>
 			</div>
-			<div className="mask-b-from-90% mask-r-from-90% relative aspect-video sm:aspect-auto">
-				<div className="absolute -right-1 -bottom-1 w-[110%] max-w-none rounded-tl-md border bg-card p-1 sm:max-h-42 md:max-h-50">
+			<div className="relative aspect-video overflow-hidden sm:aspect-auto">
+				<div className="absolute -right-1 -bottom-1 w-full max-w-full rounded-tl-md border bg-card p-1 sm:w-[110%] sm:max-w-none sm:max-h-42 md:max-h-50">
 					<DashboardPreview compact className="rounded-tl-sm" />
 				</div>
 			</div>
@@ -173,10 +172,10 @@ function DashboardVisual() {
 
 function PresenceVisual() {
 	return (
-		<div className="grid max-h-120 sm:grid-cols-2">
-			<div className="space-y-6 pt-8 pb-4 pl-8 sm:pb-8">
+		<div className="grid max-h-none sm:max-h-120 sm:grid-cols-2">
+			<div className="space-y-5 pt-6 pb-4 pl-5 pr-4 sm:space-y-6 sm:pt-8 sm:pb-8 sm:pl-8">
 				<div className="flex size-12 items-center justify-center rounded-full border bg-card shadow-xs outline outline-border/80 outline-offset-2">
-					<GlobeIcon className="size-5 text-primary/80" />
+					<LineChartIcon className="size-5 text-primary/80" />
 				</div>
 				<div className="space-y-3">
 					<FeatureTitle className="text-xl md:text-2xl">
@@ -188,10 +187,91 @@ function PresenceVisual() {
 					</FeatureDescription>
 				</div>
 			</div>
-			<div className="relative">
-				<CobeGlobe className="-top-[12%] right-0 sm:absolute" />
+			<div className="relative flex min-h-48 items-end overflow-hidden sm:min-h-0 sm:items-center sm:justify-end">
+				<PortfolioSnapshot className="relative mx-auto w-[92%] max-w-sm sm:absolute sm:-right-2 sm:bottom-4 sm:mx-0 sm:w-[108%]" />
 			</div>
 		</div>
+	);
+}
+
+function PortfolioSnapshot({ className }: { className?: string }) {
+	const accounts = [
+		{ name: "FTMO #1", win: "62%", dd: "-4.2%", ddClass: "text-emerald-600 dark:text-emerald-400" },
+		{ name: "Prop #2", win: "58%", dd: "-6.1%", ddClass: "text-amber-600 dark:text-amber-400" },
+		{ name: "Live #3", win: "71%", dd: "-2.8%", ddClass: "text-[var(--brand)]" },
+	];
+
+	return (
+		<div
+			className={cn(
+				"overflow-hidden rounded-sm border bg-card shadow-sm",
+				className,
+			)}
+			aria-hidden="true"
+		>
+			<div className="flex items-center justify-between border-b bg-muted/40 px-4 py-2.5">
+				<div>
+					<p className="text-[0.65rem] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+						Portfolio snapshot
+					</p>
+					<p className="mt-0.5 text-sm font-semibold tracking-tight">3 linked accounts</p>
+				</div>
+				<span className="rounded-sm bg-[var(--brand)]/12 px-2 py-0.5 text-[0.65rem] font-semibold text-[var(--brand)]">
+					LIVE
+				</span>
+			</div>
+
+			<div className="space-y-2 p-3 sm:p-4">
+				{accounts.map((account) => (
+					<div
+						key={account.name}
+						className="flex items-center justify-between rounded-sm border bg-background/80 px-3 py-2.5"
+					>
+						<div className="min-w-0">
+							<p className="truncate text-sm font-semibold tracking-tight">{account.name}</p>
+							<p className="text-[0.7rem] text-muted-foreground">Win rate {account.win}</p>
+						</div>
+						<div className="text-right">
+							<p className="text-[0.65rem] text-muted-foreground">Max DD</p>
+							<p className={cn("text-sm font-semibold tabular-nums", account.ddClass)}>
+								{account.dd}
+							</p>
+						</div>
+					</div>
+				))}
+			</div>
+
+			<div className="border-t bg-muted/20 px-3 pb-3 pt-2 sm:px-4 sm:pb-4">
+				<div className="mb-2 flex items-center justify-between text-[0.65rem] text-muted-foreground">
+					<span>Equity curve</span>
+					<span className="font-medium text-emerald-600 dark:text-emerald-400">+12.4%</span>
+				</div>
+				<PortfolioSparkline className="h-12 w-full text-[var(--brand)]" />
+			</div>
+		</div>
+	);
+}
+
+function PortfolioSparkline({ className }: { className?: string }) {
+	return (
+		<svg
+			className={className}
+			fill="none"
+			viewBox="0 0 280 48"
+			xmlns="http://www.w3.org/2000/svg"
+		>
+			<path
+				d="M0 38C24 34 36 28 52 30C68 32 78 18 96 16C114 14 128 24 146 22C164 20 176 10 194 12C212 14 224 8 240 10C256 12 268 6 280 4"
+				stroke="currentColor"
+				strokeLinecap="round"
+				strokeWidth="2"
+			/>
+			<path
+				d="M0 38C24 34 36 28 52 30C68 32 78 18 96 16C114 14 128 24 146 22C164 20 176 10 194 12C212 14 224 8 240 10C256 12 268 6 280 4V48H0V38Z"
+				fill="currentColor"
+				fillOpacity="0.12"
+			/>
+		</svg>
 	);
 }
 

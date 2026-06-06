@@ -4,6 +4,7 @@ import { MarketingNav } from "@/components/marketing/MarketingNav";
 import { APP_NAME, APP_TAGLINE } from "@/lib/brand";
 import "../marketing.css";
 import "../marketing-polish.css";
+import "../marketing-mobile.css";
 
 export const metadata: Metadata = {
   title: `${APP_NAME} — Intelligent Trading Platform`,

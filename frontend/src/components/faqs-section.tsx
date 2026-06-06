@@ -21,8 +21,8 @@ export function FaqsSection() {
 			</div>
 			<Accordion className="rounded-sm border">
 				{FAQ_ITEMS.map((item) => (
-					<AccordionItem className="px-5 md:px-6" key={item.id} value={item.id}>
-						<AccordionTrigger className="py-5 text-base font-medium hover:no-underline md:text-lg">
+					<AccordionItem className="px-4 sm:px-5 md:px-6" key={item.id} value={item.id}>
+						<AccordionTrigger className="py-4 text-left text-base font-medium hover:no-underline sm:py-5 md:text-lg">
 							{item.title}
 						</AccordionTrigger>
 						<AccordionContent className="pb-5 text-base leading-relaxed text-muted-foreground md:text-lg">

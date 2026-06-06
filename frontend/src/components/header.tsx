@@ -19,15 +19,15 @@ export function Header() {
 	return (
 		<header
 			className={cn(
-				"sticky top-0 z-50 mx-auto w-full max-w-6xl border-transparent border-b px-4 pt-4 md:px-6",
+				"sticky top-0 z-50 mx-auto w-full max-w-6xl border-transparent border-b px-3 pt-3 sm:px-4 sm:pt-4 md:px-6",
 				"transition-[border-color,background-color,box-shadow,transform] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)]",
 				scrolled &&
 					"border-border bg-background/95 shadow-sm backdrop-blur-md supports-backdrop-filter:bg-background/80 md:top-3 md:rounded-sm",
 			)}
 		>
-			<nav className="flex h-16 w-full items-center justify-between md:h-[4.25rem]">
+			<nav className="flex h-14 w-full min-w-0 items-center justify-between sm:h-16 md:h-[4.25rem]">
 				<Link
-					className="rounded-sm p-2 transition-[background-color,transform] duration-200 ease-out hover:bg-muted active:scale-[0.98] dark:hover:bg-muted/50"
+					className="shrink-0 rounded-sm p-1.5 transition-[background-color,transform] duration-200 ease-out hover:bg-muted active:scale-[0.98] dark:hover:bg-muted/50 sm:p-2"
 					href="/"
 				>
 					<Logo />

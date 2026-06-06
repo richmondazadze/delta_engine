@@ -1,4 +1,4 @@
-import { Integrations } from "@/components/integrations";
+import { PlatformConnectSection } from "@/components/platform-connect-section";
 import { Contact } from "@/components/contact";
 import { CallToAction } from "@/components/cta";
 import { MarketingSection } from "@/components/marketing/MarketingSection";
@@ -15,7 +15,7 @@ export default function ComparePage() {
         description={hero.description}
         className="pt-8 md:pt-12"
       >
-        <Integrations />
+        <PlatformConnectSection />
       </MarketingSection>
 
       <MarketingSection className="mk-section-tight" reveal={false}>

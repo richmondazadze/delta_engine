@@ -29,31 +29,60 @@ export function MarketingSection({
 
   const header =
     kicker || title || description ? (
-      <div
-        className={cn(
-          "mb-14 md:mb-20",
-          isCenter ? "mx-auto max-w-3xl text-center" : "max-w-3xl",
-        )}
-      >
-        {kicker ? (
-          <p className="mk-kicker mb-4">{kicker}</p>
-        ) : null}
-        {title ? <h2 className="mk-section-title">{title}</h2> : null}
-        {description ? (
-          <p className={cn("mk-section-lead", title && "mt-5")}>{description}</p>
-        ) : null}
-      </div>
+      reveal ? (
+        <MarketingReveal>
+          <SectionHeader
+            kicker={kicker}
+            title={title}
+            description={description}
+            isCenter={isCenter}
+          />
+        </MarketingReveal>
+      ) : (
+        <SectionHeader
+          kicker={kicker}
+          title={title}
+          description={description}
+          isCenter={isCenter}
+        />
+      )
     ) : null;
 
   const body = (
     <section id={id} className={cn("mk-section", className)}>
       <div className={cn("mk-section-inner", innerClassName)}>
         {header}
-        {children}
+        {reveal ? <MarketingReveal delay={0.1}>{children}</MarketingReveal> : children}
       </div>
     </section>
   );
 
-  if (!reveal) return body;
-  return <MarketingReveal>{body}</MarketingReveal>;
+  return body;
+}
+
+function SectionHeader({
+  kicker,
+  title,
+  description,
+  isCenter,
+}: {
+  kicker?: string;
+  title?: string;
+  description?: string;
+  isCenter: boolean;
+}) {
+  return (
+    <div
+      className={cn(
+        "mb-10 md:mb-20",
+        isCenter ? "mx-auto max-w-3xl text-center" : "max-w-3xl",
+      )}
+    >
+      {kicker ? <p className="mk-kicker mb-4">{kicker}</p> : null}
+      {title ? <h2 className="mk-section-title">{title}</h2> : null}
+      {description ? (
+        <p className={cn("mk-section-lead", title && "mt-5")}>{description}</p>
+      ) : null}
+    </div>
+  );
 }

@@ -6,7 +6,7 @@ import { ArrowRightIcon } from "lucide-react";
 
 export function CallToAction() {
 	return (
-		<div className="relative mx-auto flex w-full max-w-4xl flex-col justify-between gap-y-8 border-y px-6 py-14 dark:bg-[radial-gradient(35%_80%_at_25%_0%,--theme(--color-foreground/.08),transparent)] md:px-10 md:py-20">
+		<div className="relative mx-auto flex w-full max-w-4xl flex-col justify-between gap-y-6 overflow-x-clip border-y px-4 py-10 dark:bg-[radial-gradient(35%_80%_at_25%_0%,--theme(--color-foreground/.08),transparent)] sm:gap-y-8 sm:px-6 md:px-10 md:py-20">
 			<DecorIcon className="size-4" position="top-left" />
 			<DecorIcon className="size-4" position="top-right" />
 			<DecorIcon className="size-4" position="bottom-left" />

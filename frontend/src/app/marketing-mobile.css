@@ -1,0 +1,50 @@
+/* CopyMorphic marketing — mobile layout + overflow guards */
+
+.marketing-page {
+  overflow-x: clip;
+  width: 100%;
+  max-width: 100%;
+}
+
+.marketing-page img,
+.marketing-page video {
+  max-width: 100%;
+}
+
+@media (max-width: 767px) {
+  .mk-section {
+    padding-block: clamp(3rem, 8vw, 4.5rem);
+  }
+
+  .mk-section-inner {
+    width: min(72rem, 100% - 1.25rem);
+  }
+
+  .mk-section-tight {
+    padding-block: clamp(2.25rem, 6vw, 3.5rem);
+  }
+
+  .mk-kicker {
+    font-size: 0.75rem;
+    letter-spacing: 0.14em;
+  }
+
+  .mk-section-title {
+    font-size: clamp(1.65rem, 7vw, 2rem);
+  }
+
+  .mk-section-lead,
+  .mk-body {
+    font-size: 1rem;
+  }
+
+  .mk-platform-badge {
+    min-height: 6.5rem;
+    padding: 1.25rem 1rem;
+  }
+}
+
+/* Prevent decorative full-bleed dividers from causing horizontal scroll */
+.marketing-page [data-contained="false"] {
+  max-width: 100vw;
+}

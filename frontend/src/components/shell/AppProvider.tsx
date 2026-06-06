@@ -10,6 +10,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type {
   Account,
@@ -61,6 +62,7 @@ export function useApp() {
 }
 
 export function AppProvider({ children }: { children: ReactNode }) {
+  const router = useRouter();
   const supabase = createClient();
   const [loading, setLoading] = useState(true);
   const [token, setToken] = useState<string | null>(null);
@@ -232,7 +234,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const signOut = useCallback(async () => {
     await supabase.auth.signOut();
-  }, [supabase.auth]);
+    router.push("/login");
+    router.refresh();
+  }, [supabase.auth, router]);
 
   const value = useMemo<AppContextValue>(
     () => ({

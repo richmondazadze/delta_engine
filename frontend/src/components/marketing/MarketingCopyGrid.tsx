@@ -1,4 +1,7 @@
+"use client";
+
 import { cn } from "@/lib/utils";
+import { MarketingStagger, MarketingStaggerItem } from "./MarketingReveal";
 
 type Item = {
   title: string;
@@ -13,7 +16,7 @@ type Props = {
 
 export function MarketingCopyGrid({ items, columns = 3, className }: Props) {
   return (
-    <div
+    <MarketingStagger
       className={cn(
         "grid gap-6",
         columns === 2 && "md:grid-cols-2 md:gap-8",
@@ -23,12 +26,14 @@ export function MarketingCopyGrid({ items, columns = 3, className }: Props) {
       )}
     >
       {items.map((item) => (
-        <article key={item.title} className="rounded-sm border bg-card p-8">
-          <h3 className="text-xl font-semibold tracking-tight md:text-2xl">{item.title}</h3>
-          <p className="mk-body mt-4">{item.body}</p>
-        </article>
+        <MarketingStaggerItem key={item.title}>
+          <article className="h-full rounded-sm border bg-card p-6 sm:p-8">
+            <h3 className="text-xl font-semibold tracking-tight md:text-2xl">{item.title}</h3>
+            <p className="mk-body mt-4">{item.body}</p>
+          </article>
+        </MarketingStaggerItem>
       ))}
-    </div>
+    </MarketingStagger>
   );
 }
 
@@ -42,7 +47,7 @@ export function MarketingBanner({ title, description, className }: BannerProps) 
   return (
     <div
       className={cn(
-        "rounded-sm border bg-[var(--brand-tint)] px-8 py-10 text-center md:px-12 md:py-14",
+        "rounded-sm border bg-[var(--brand-tint)] px-5 py-8 text-center sm:px-8 md:px-12 md:py-14",
         className,
       )}
     >

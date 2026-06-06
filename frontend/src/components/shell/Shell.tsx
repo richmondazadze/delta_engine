@@ -6,10 +6,11 @@ import { usePathname } from "next/navigation";
 import { BrandLogo } from "@/components/BrandLogo";
 import { Icon, type IconName } from "@/components/icons/Icon";
 import { useApp } from "./AppProvider";
-import { fmtClock, initials } from "@/lib/format";
+import { UserMenu } from "./UserMenu";
+import { fmtClock } from "@/lib/format";
 
 const NAV: { path: string; label: string; icon: IconName }[] = [
-  { path: "/dashboard", label: "Home", icon: "dashboard" },
+  { path: "/dashboard", label: "Dashboard", icon: "dashboard" },
   { path: "/accounts", label: "Accounts", icon: "server" },
   { path: "/copiers", label: "Copy engine", icon: "branch" },
   { path: "/logs", label: "Copy log", icon: "logs" },
@@ -28,11 +29,7 @@ export function Sidebar({
   onClose?: () => void;
 }) {
   const pathname = usePathname();
-  const { email, signOut, accounts, subscriptionPlan } = useApp();
-  const planLabel =
-    subscriptionPlan === "free"
-      ? "Free"
-      : subscriptionPlan.charAt(0).toUpperCase() + subscriptionPlan.slice(1);
+  const { accounts, subscriptionPlan } = useApp();
   const active = (p: string) =>
     pathname === p || (p !== "/dashboard" && pathname.startsWith(p));
 
@@ -80,30 +77,20 @@ export function Sidebar({
           </Link>
         ))}
       </nav>
-      <div className="sb-foot">
-        {subscriptionPlan === "admin" && (
+      {subscriptionPlan === "admin" && (
+        <div className="sb-foot sb-foot-minimal">
           <Link href="/admin/overview" className="sb-ops-link" onClick={close}>
             <Icon name="shield" size={14} />
             Operations console
           </Link>
-        )}
-        <div className="row gap8">
-          <div className="av">{initials(email || "CM")}</div>
-          <div style={{ minWidth: 0 }}>
-            <div className="em">{email || "—"}</div>
-            <span className="plan">{planLabel} plan</span>
-          </div>
         </div>
-        <button type="button" className="logout" onClick={() => signOut()}>
-          Log out
-        </button>
-      </div>
+      )}
     </aside>
   );
 }
 
 const CRUMB: Record<string, string[]> = {
-  "/dashboard": ["Home"],
+  "/dashboard": ["Dashboard"],
   "/accounts": ["Accounts"],
   "/accounts/new": ["Accounts", "Link account"],
   "/copiers": ["Copy engine"],
@@ -172,7 +159,7 @@ function NotificationPanel({ onClose }: { onClose: () => void }) {
 
 export function Header({ onMenuOpen }: { onMenuOpen?: () => void }) {
   const pathname = usePathname();
-  const { paused, setPaused, email, workerHealthy, dashboard } = useApp();
+  const { paused, setPaused, workerHealthy, dashboard } = useApp();
   const [notifOpen, setNotifOpen] = useState(false);
   const unread = (dashboard?.today?.copies ?? 0) + (dashboard?.today?.failed ?? 0);
 
@@ -181,7 +168,7 @@ export function Header({ onMenuOpen }: { onMenuOpen?: () => void }) {
     if (pathname.startsWith("/accounts/")) crumbs = ["Accounts", "Account"];
     else if (pathname.startsWith("/copiers/")) crumbs = ["Copy engine", "Edit setup"];
     else if (pathname.startsWith("/risk/")) crumbs = ["Settings", "Risk limits"];
-    else crumbs = ["Home"];
+    else crumbs = ["Dashboard"];
   }
 
   return (
@@ -259,7 +246,7 @@ export function Header({ onMenuOpen }: { onMenuOpen?: () => void }) {
           </button>
           {notifOpen && <NotificationPanel onClose={() => setNotifOpen(false)} />}
         </div>
-        <div className="h-av hide-mobile-sm">{initials(email || "CM")}</div>
+        <UserMenu />
       </div>
     </header>
   );

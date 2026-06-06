@@ -1,7 +1,5 @@
 "use client";
 
-import { cn } from "@/lib/utils";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { useState } from "react";
@@ -10,6 +8,7 @@ import * as PricingCard from "@/components/pricing-card";
 import { CheckCircle2, Users, Briefcase, Building } from "lucide-react";
 import { PRICING_PLANS } from "@/lib/marketing-content";
 import { useAccessToken } from "@/components/shell/AppProvider";
+import { MarketingStagger, MarketingStaggerItem } from "@/components/marketing/MarketingReveal";
 import * as api from "@/lib/data";
 
 const ICONS: Record<(typeof PRICING_PLANS)[number]["icon"], ReactNode> = {
@@ -49,20 +48,28 @@ export function PricingSection() {
 
   return (
     <section className="w-full">
-      <div className="mx-auto grid w-full max-w-5xl gap-8 md:grid-cols-3 md:gap-6">
+      <MarketingStagger className="mx-auto grid w-full max-w-5xl items-stretch gap-8 md:grid-cols-3 md:gap-6">
         {PRICING_PLANS.map((plan, index) => (
-          <PricingCard.Card
-            className={cn("w-full max-w-full", index === 1 && "md:scale-[1.02]")}
-            key={plan.name}
-          >
+          <MarketingStaggerItem key={plan.name} className="h-full">
+            <PricingCard.Card
+              className={
+                index === 1
+                  ? "shadow-[0_12px_40px_rgb(0_137_123_/_0.12)] ring-2 ring-[color-mix(in_oklab,var(--brand)_40%,var(--border))]"
+                  : undefined
+              }
+            >
             <PricingCard.Header isPopular={index === 1}>
               <PricingCard.Plan>
                 <PricingCard.PlanName>
                   {ICONS[plan.icon]}
                   <span>{plan.name}</span>
                 </PricingCard.PlanName>
-                {"badge" in plan && plan.badge && (
+                {"badge" in plan && plan.badge ? (
                   <PricingCard.Badge>{plan.badge}</PricingCard.Badge>
+                ) : (
+                  <span className="invisible rounded-full border px-3 py-1 text-xs" aria-hidden>
+                    Popular
+                  </span>
                 )}
               </PricingCard.Plan>
               <PricingCard.Price>
@@ -70,7 +77,7 @@ export function PricingSection() {
                 <PricingCard.Period>{plan.period}</PricingCard.Period>
               </PricingCard.Price>
               <Button
-                className="h-11 w-full rounded-sm text-base font-semibold transition-transform duration-200 ease-out active:scale-[0.98]"
+                className="h-11 w-full text-base font-semibold"
                 variant={plan.variant}
                 disabled={loading === plan.planId}
                 onClick={() => choosePlan(plan.planId)}
@@ -91,24 +98,9 @@ export function PricingSection() {
               </PricingCard.List>
             </PricingCard.Body>
           </PricingCard.Card>
+          </MarketingStaggerItem>
         ))}
-      </div>
-      <p className="mx-auto mt-8 max-w-2xl text-center text-sm text-muted-foreground">
-        Slightly below{" "}
-        <a
-          href="https://tradersconnect.com/pricing"
-          className="underline underline-offset-2"
-          target="_blank"
-          rel="noreferrer"
-        >
-          TradersConnect
-        </a>{" "}
-        per-account rates.{" "}
-        <Link href="/settings/billing" className="underline underline-offset-2">
-          Adjust account quantity
-        </Link>{" "}
-        before checkout.
-      </p>
+      </MarketingStagger>
     </section>
   );
 }

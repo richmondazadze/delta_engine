@@ -1,6 +1,5 @@
-import "@/app/auth-brand.css";
-import { AuthPage } from "../../../../components/auth-page";
+import { AuthLoginForm } from "@/components/auth/AuthLoginForm";
 
 export default function AuthBlockPreviewPage() {
-  return <AuthPage />;
+  return <AuthLoginForm />;
 }

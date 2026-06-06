@@ -338,6 +338,97 @@ html, body {
   display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 12px;
   cursor: pointer; flex: none;
 }
+.user-menu-trigger {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 2px 4px 2px 2px; border: 1px solid transparent; border-radius: 999px;
+  background: transparent; cursor: pointer;
+  transition: border-color var(--dur) var(--ease), background var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+}
+.user-menu-trigger:hover,
+.user-menu-trigger[data-popup-open] {
+  border-color: var(--border); background: var(--panel);
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06);
+}
+.user-menu-chevron { color: var(--faint); transition: transform var(--dur) var(--ease); }
+.user-menu-trigger[data-popup-open] .user-menu-chevron { transform: rotate(180deg); }
+.sb-foot-minimal { padding-top: 8px; }
+
+/* --- Dashboard overview --- */
+@keyframes dash-rise {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.dash-rise { animation: dash-rise 0.45s var(--ease) both; }
+.dash-page .page-head h1 { font-size: 22px; letter-spacing: -0.02em; }
+.dash-stat-grid,
+.dash-perf-grid {
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-bottom: 16px;
+}
+.dash-stat {
+  background: var(--canvas); border: 1px solid var(--border); border-radius: var(--r-card);
+  padding: 16px 18px; position: relative; overflow: hidden;
+  animation: dash-rise 0.5s var(--ease) both;
+  transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease), transform var(--dur) var(--ease);
+}
+.dash-stat:hover { border-color: var(--border-strong); box-shadow: 0 8px 24px rgba(15, 23, 42, 0.05); transform: translateY(-1px); }
+.dash-stat-label { font-size: 11.5px; font-weight: 600; color: var(--text-secondary); margin-bottom: 8px; }
+.dash-stat-value {
+  font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+  font-size: 26px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.1; color: var(--dark);
+}
+.dash-stat-sub { margin-top: 8px; font-size: 11.5px; color: var(--faint); display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.dash-compare { display: inline-flex; align-items: center; gap: 4px; font-weight: 600; }
+.dash-compare.up { color: var(--success); }
+.dash-compare.down { color: var(--error); }
+.dash-compare.flat { color: var(--faint); }
+.dash-compare-muted { font-weight: 400; color: var(--faint); margin-left: 2px; }
+.dash-two-col { display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 14px; margin-bottom: 16px; }
+.dash-panel { overflow: hidden; }
+.dash-mini-grid { padding: 4px 0 8px; display: flex; flex-direction: column; gap: 10px; }
+.dash-pipe-row {
+  padding: 12px 16px; border-top: 1px solid var(--border);
+  transition: background var(--dur) var(--ease);
+}
+.dash-pipe-row:hover { background: var(--panel); }
+.dash-health-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; background: var(--border); }
+.dash-health-item {
+  background: var(--canvas); padding: 16px 18px;
+  transition: background var(--dur) var(--ease);
+}
+.dash-health-item:hover { background: var(--panel); }
+.dash-health-label { display: block; font-size: 11.5px; color: var(--text-secondary); margin-bottom: 6px; }
+.dash-health-val { font-family: var(--font-mono); font-size: 22px; font-weight: 600; color: var(--dark); }
+.dash-table-wrap { overflow-x: auto; }
+.dash-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.dash-table th {
+  text-align: left; padding: 10px 16px; font-size: 10px; font-weight: 600;
+  letter-spacing: 0.05em; text-transform: uppercase; color: var(--faint);
+  border-bottom: 1px solid var(--border); background: var(--panel);
+}
+.dash-table td { padding: 11px 16px; border-bottom: 1px solid var(--border); }
+.dash-table-row { transition: background var(--dur) var(--ease); }
+.dash-table-row:hover { background: var(--panel); }
+.dash-empty-cell { text-align: center; color: var(--faint); padding: 28px 16px !important; }
+.dash-tab-body { padding: 8px 0 4px; }
+.dash-acct-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 12px 16px; border-top: 1px solid var(--border); text-decoration: none; color: inherit;
+  transition: background var(--dur) var(--ease);
+}
+.dash-acct-row:hover { background: var(--panel); }
+.dash-acct-row.static { cursor: default; }
+.dash-step-dot {
+  display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+  border: 1.5px solid currentColor;
+}
+.dash-zero-icon,
+.dash-step-icon {
+  width: 52px; height: 52px; margin: 0 auto 16px; border: 1px solid var(--border);
+  border-radius: var(--r-card); display: flex; align-items: center; justify-content: center;
+  background: var(--panel); color: var(--accent);
+}
+.dash-step-icon { width: 34px; height: 34px; margin: 0; border-radius: var(--r-button); }
+.dash-step-num { font-size: 22px; font-weight: 600; color: var(--text-quaternary); }
 
 /* --- Page scroll region --- */
 .page { flex: 1; overflow-y: auto; padding: 26px; }
@@ -503,6 +594,11 @@ html, body {
   padding: 9px 11px; border: 1px solid var(--border-strong); border-radius: var(--r-input);
   background: var(--canvas); transition: border var(--dur) var(--ease), box-shadow var(--dur) var(--ease), background var(--dur) var(--ease);
   outline: none;
+}
+@media (max-width: 767px) {
+  .inp, .sel, textarea.inp {
+    font-size: 16px;
+  }
 }
 .inp.mono, .sel.mono { font-family: var(--font-mono); }
 .inp:hover, .sel:hover { background: rgba(9,9,11,0.015); }
@@ -1265,6 +1361,9 @@ html, body {
 @media (max-width: 960px) {
   .summary-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .dash-stat-grid,
+  .dash-perf-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .dash-two-col { grid-template-columns: 1fr; }
   .portfolio-hero { flex-direction: column; align-items: flex-start; }
 }
 
@@ -1517,6 +1616,8 @@ html, body {
   .page-head .actions .btn { flex: 1; min-width: 0; }
   .page-head h1 { font-size: 19px; }
   .kpi-grid { grid-template-columns: 1fr; gap: 10px; }
+  .dash-stat-grid,
+  .dash-perf-grid { grid-template-columns: 1fr; gap: 10px; }
   .summary-strip { grid-template-columns: 1fr 1fr; gap: 10px; }
   .summary-stat .ss-value { font-size: 18px; }
   .portfolio-hero { padding: 18px 16px; }

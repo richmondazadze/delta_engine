@@ -3,10 +3,10 @@
 import Link from "next/link";
 import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { AtSignIcon, LockIcon } from "lucide-react";
+import { AtSignIcon, LockIcon, MailIcon } from "lucide-react";
 import { GoogleIcon } from "@/components/google-icon";
 import { AuthDivider } from "@/components/auth-divider";
-import { AuthShell } from "@/components/auth/AuthShell";
+import { AuthPageShell } from "@/components/auth/AuthPageShell";
 import { Button } from "@/components/ui/button";
 import {
   InputGroup,
@@ -59,12 +59,12 @@ function LoginFormInner() {
   };
 
   return (
-    <AuthShell
+    <AuthPageShell
       title="Welcome back"
       description="Sign in to your CopyMorphic workspace — manage copiers, accounts, and execution logs from one command center."
     >
       <Button
-        className="h-11 w-full rounded-sm text-base"
+        className="h-11 w-full text-base"
         type="button"
         variant="outline"
         disabled={googleLoading || loading}
@@ -77,7 +77,7 @@ function LoginFormInner() {
       <AuthDivider>or continue with email</AuthDivider>
 
       <form className="space-y-3" onSubmit={submit}>
-        <InputGroup className="h-11 rounded-sm">
+        <InputGroup className="h-11">
           <InputGroupInput
             aria-label="Email address"
             autoComplete="email"
@@ -88,11 +88,11 @@ function LoginFormInner() {
             onChange={(e) => setEmail(e.target.value)}
           />
           <InputGroupAddon align="inline-start">
-            <AtSignIcon className="size-4" />
+            <MailIcon className="size-4" />
           </InputGroupAddon>
         </InputGroup>
 
-        <InputGroup className="h-11 rounded-sm">
+        <InputGroup className="h-11">
           <InputGroupInput
             aria-label="Password"
             autoComplete="current-password"
@@ -107,20 +107,29 @@ function LoginFormInner() {
           </InputGroupAddon>
         </InputGroup>
 
+        <div className="auth-forgot-link flex justify-end lg:justify-end">
+          <Link
+            className="text-sm font-medium text-[var(--brand)] hover:underline"
+            href="/forgot-password"
+          >
+            Forgot password?
+          </Link>
+        </div>
+
         {callbackError === "auth_callback" && !error ? (
-          <p className="rounded-sm border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          <p className="auth-alert border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
             Sign-in could not be completed. Try email/password or check OAuth redirect URLs in
             Supabase.
           </p>
         ) : null}
         {error ? (
-          <p className="rounded-sm border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          <p className="auth-alert border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
             {error}
           </p>
         ) : null}
 
         <Button
-          className="h-11 w-full rounded-sm text-base"
+          className="h-11 w-full text-base"
           disabled={loading || googleLoading}
           type="submit"
         >
@@ -128,13 +137,13 @@ function LoginFormInner() {
         </Button>
       </form>
 
-      <p className="text-center text-base text-muted-foreground">
+      <p className="auth-switch-link text-base text-muted-foreground">
         No account?{" "}
         <Link className="font-semibold text-[var(--brand)] hover:underline" href="/register">
           Create one
         </Link>
       </p>
-    </AuthShell>
+    </AuthPageShell>
   );
 }
 

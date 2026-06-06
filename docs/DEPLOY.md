@@ -75,7 +75,27 @@ docker run -p 8000:8000 --env-file .env copymorphic-api
 2. **Build:** `pip install -r requirements.txt`
 3. **Start:** `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
 4. Python **3.12.8** is pinned via `backend/.python-version` (do not use 3.14 — `pydantic-core` has no wheels yet).
-5. Set production env vars in Render dashboard (see `.env.example`; no `.env` file on the server).
+5. Set production env vars in Render dashboard (no `.env` file on the server).
+
+**Required Render environment variables** (copy from local `.env` — app will not start if any are missing):
+
+| Variable | Where to get it |
+|----------|-----------------|
+| `API_ENV` | `production` |
+| `API_DEBUG` | `false` |
+| `API_CORS_ORIGINS` | `https://copymorphic.vercel.app` |
+| `SUPABASE_URL` | Supabase → Settings → API |
+| `SUPABASE_ANON_KEY` | Supabase → Settings → API (anon public) |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase → Settings → API (**service_role** — secret) |
+| `SUPABASE_JWT_SECRET` | Supabase → Settings → API → JWT Secret |
+| `ENCRYPTION_KEY` | Same hex key as local (do not change) |
+| `WORKER_API_KEY` | Same as local worker config |
+
+Optional for billing: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_*`.
+
+Do **not** add `NEXT_PUBLIC_*` on Render — those belong on Vercel only.
+
+After saving env vars, **Manual Deploy** again. Verify: `GET https://<service>.onrender.com/health`.
 
 ### Worker → Windows VPS
 

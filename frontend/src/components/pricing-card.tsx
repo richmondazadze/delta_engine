@@ -5,7 +5,7 @@ function Card({ className, ...props }: React.ComponentProps<"div">) {
 	return (
 		<div
 			className={cn(
-				"relative w-full max-w-xs rounded-sm border bg-background p-1",
+				"relative flex h-full w-full flex-col rounded-sm border bg-background p-1",
 				className
 			)}
 			{...props}
@@ -24,8 +24,8 @@ function Header({
 	return (
 		<div
 			className={cn(
-				"relative mb-4 rounded-sm border p-4",
-				isPopular && "bg-card shadow-xs",
+				"relative mb-4 shrink-0 rounded-sm border p-4",
+				isPopular && "border-[color-mix(in_oklab,var(--brand)_35%,var(--border))] bg-card shadow-xs",
 				className
 			)}
 			{...props}
@@ -38,7 +38,7 @@ function Header({
 function Plan({ className, ...props }: React.ComponentProps<"div">) {
 	return (
 		<div
-			className={cn("mb-8 flex items-center justify-between", className)}
+			className={cn("mb-6 flex min-h-9 items-start justify-between gap-3", className)}
 			{...props}
 		/>
 	);
@@ -46,7 +46,13 @@ function Plan({ className, ...props }: React.ComponentProps<"div">) {
 
 function Description({ className, ...props }: React.ComponentProps<"p">) {
 	return (
-		<p className={cn("text-muted-foreground text-xs", className)} {...props} />
+		<p
+			className={cn(
+				"min-h-[3.25rem] text-xs leading-relaxed text-muted-foreground",
+				className
+			)}
+			{...props}
+		/>
 	);
 }
 
@@ -111,11 +117,21 @@ function OriginalPrice({ className, ...props }: React.ComponentProps<"span">) {
 }
 
 function Body({ className, ...props }: React.ComponentProps<"div">) {
-	return <div className={cn("space-y-6 p-3", className)} {...props} />;
+	return (
+		<div className={cn("flex flex-1 flex-col space-y-6 p-3", className)} {...props} />
+	);
 }
 
 function List({ className, ...props }: React.ComponentProps<"ul">) {
-	return <ul className={cn("space-y-3", className)} {...props} />;
+	return (
+		<ul
+			className={cn(
+				"flex min-h-[11.75rem] flex-1 flex-col justify-start space-y-3",
+				className
+			)}
+			{...props}
+		/>
+	);
 }
 
 function ListItem({ className, ...props }: React.ComponentProps<"li">) {

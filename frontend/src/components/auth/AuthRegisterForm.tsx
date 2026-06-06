@@ -3,10 +3,10 @@
 import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { AtSignIcon, LockIcon } from "lucide-react";
+import { AtSignIcon, LockIcon, MailIcon } from "lucide-react";
 import { GoogleIcon } from "@/components/google-icon";
 import { AuthDivider } from "@/components/auth-divider";
-import { AuthShell } from "@/components/auth/AuthShell";
+import { AuthPageShell } from "@/components/auth/AuthPageShell";
 import { Button } from "@/components/ui/button";
 import {
   InputGroup,
@@ -68,12 +68,12 @@ export function AuthRegisterForm() {
   };
 
   return (
-    <AuthShell
+    <AuthPageShell
       title="Create your workspace"
       description="Start free with CopyMorphic — connect accounts, deploy copy paths, and monitor execution across every platform you trade on."
     >
       <Button
-        className="h-11 w-full rounded-sm text-base"
+        className="h-11 w-full text-base"
         type="button"
         variant="outline"
         disabled={googleLoading || loading}
@@ -86,7 +86,7 @@ export function AuthRegisterForm() {
       <AuthDivider>or continue with email</AuthDivider>
 
       <form className="space-y-3" onSubmit={submit}>
-        <InputGroup className="h-11 rounded-sm">
+        <InputGroup className="h-11">
           <InputGroupInput
             aria-label="Email address"
             autoComplete="email"
@@ -97,11 +97,11 @@ export function AuthRegisterForm() {
             onChange={(e) => setEmail(e.target.value)}
           />
           <InputGroupAddon align="inline-start">
-            <AtSignIcon className="size-4" />
+            <MailIcon className="size-4" />
           </InputGroupAddon>
         </InputGroup>
 
-        <InputGroup className="h-11 rounded-sm">
+        <InputGroup className="h-11">
           <InputGroupInput
             aria-label="Password"
             autoComplete="new-password"
@@ -118,18 +118,18 @@ export function AuthRegisterForm() {
         </InputGroup>
 
         {error ? (
-          <p className="rounded-sm border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          <p className="auth-alert border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
             {error}
           </p>
         ) : null}
         {message ? (
-          <p className="rounded-sm border border-[var(--brand)]/30 bg-[var(--brand-tint)] px-3 py-2 text-sm text-[var(--brand-press)]">
+          <p className="auth-alert border border-[var(--brand)]/30 bg-[var(--brand-tint)] px-3 py-2 text-sm text-[var(--brand-press)]">
             {message}
           </p>
         ) : null}
 
         <Button
-          className="h-11 w-full rounded-sm text-base"
+          className="h-11 w-full text-base"
           disabled={loading || googleLoading}
           type="submit"
         >
@@ -137,12 +137,12 @@ export function AuthRegisterForm() {
         </Button>
       </form>
 
-      <p className="text-center text-base text-muted-foreground">
+      <p className="auth-switch-link text-base text-muted-foreground">
         Already have an account?{" "}
         <Link className="font-semibold text-[var(--brand)] hover:underline" href="/login">
           Sign in
         </Link>
       </p>
-    </AuthShell>
+    </AuthPageShell>
   );
 }
