@@ -1,0 +1,17 @@
+# Local credentials & runtime
+.env
+venv/
+.venv/
+logs/*
+!logs/.gitkeep
+*.jsonl
+*.log
+
+# User-specific YAML (templates are *.example.yaml in config/)
+config/accounts.yaml
+config/copiers.yaml
+config/symbol_map.yaml
+
+__pycache__/
+*.py[cod]
+.pytest_cache/

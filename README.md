@@ -27,6 +27,8 @@ From repo root in PowerShell:
 
 This creates Python venvs, installs dependencies, copies config templates, and generates `.env` keys.
 
+**Not committed to git** (see `.gitignore`): root `.env`, `frontend/.env.local`, `worker/config/accounts.yaml` / `copiers.yaml` / `symbol_map.yaml`, venvs, `node_modules`, `.next`, and `worker/logs/*.jsonl`. Only `*.example.yaml` and `.env.example` templates are tracked.
+
 ### 2. Configure MT5 accounts
 
 Edit `worker/config/accounts.yaml`:
@@ -86,7 +88,7 @@ Execution log (dev): `worker/logs/execution_events.jsonl`
 ## Backend API (optional for worker-only dev)
 
 1. Create a [Supabase](https://supabase.com) project  
-2. Run SQL migrations in `supabase/migrations/` (001–010) — or use Supabase MCP  
+2. Run SQL migrations in `supabase/migrations/` (**001–017**) — or use Supabase MCP `list_migrations` / `apply_migration`  
 3. Fill `SUPABASE_*` in root `.env` (URL, anon key, **service role key**, JWT secret from Supabase → Settings → API)  
 4. Start API:
 

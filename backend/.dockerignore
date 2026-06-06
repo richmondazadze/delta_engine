@@ -1,0 +1,19 @@
+# Do not copy secrets or dev artifacts into API images
+.env
+.env.*
+!.env.example
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.git/
+.github/
+frontend/
+worker/
+docs/
+supabase/
+*.md
+tests/
+**/*.log
