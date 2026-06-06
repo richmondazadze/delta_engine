@@ -69,6 +69,14 @@ docker build -f backend/Dockerfile -t copymorphic-api .
 docker run -p 8000:8000 --env-file .env copymorphic-api
 ```
 
+**Option C — Render (Native Python)**
+
+1. **Root Directory:** `backend`
+2. **Build:** `pip install -r requirements.txt`
+3. **Start:** `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
+4. Python **3.12.8** is pinned via `backend/.python-version` (do not use 3.14 — `pydantic-core` has no wheels yet).
+5. Set production env vars in Render dashboard (see `.env.example`; no `.env` file on the server).
+
 ### Worker → Windows VPS
 
 One supervised worker per customer cohort (or per user for beta):
