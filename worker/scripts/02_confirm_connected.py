@@ -19,7 +19,16 @@ def main():
     parser.add_argument("--symbol", "-s", default="EURUSDm")
     args = parser.parse_args()
 
-    cfg = get_account(load_accounts(), args.account)
+    try:
+        cfg = get_account(load_accounts(), args.account)
+    except KeyError:
+        print(
+            f"Account '{args.account}' not found in worker config.\n"
+            "For dashboard-linked accounts, use:\n"
+            "  python scripts\\14_test_linked_account.py --account <uuid>\n"
+            "Requires WORKER_API_KEY + WORKER_USER_ID in .env (user must own the account)."
+        )
+        return 1
     session = AccountSession(
         account_id=cfg.id,
         label=cfg.label,

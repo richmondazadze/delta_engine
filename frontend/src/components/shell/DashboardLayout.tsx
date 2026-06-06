@@ -17,7 +17,7 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          color: "var(--muted)",
+          color: "var(--text-secondary)",
         }}
       >
         Loading workspace…

@@ -4,7 +4,7 @@ import { MarketingReveal } from "./MarketingReveal";
 
 type Props = {
   id?: string;
-  children: ReactNode;
+  children?: ReactNode;
   className?: string;
   innerClassName?: string;
   kicker?: string;

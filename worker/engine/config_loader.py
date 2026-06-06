@@ -47,10 +47,12 @@ class AccountConfig:
     id: str
     label: str
     role: str
-    login: int
+    login: str
     password: str
     server: str
     terminal_path: Optional[str] = None
+    api_base_url: Optional[str] = None
+    platform: str = "mt5"
     enabled: bool = True
 
 
@@ -117,10 +119,12 @@ def load_accounts() -> list[AccountConfig]:
                 id=row["id"],
                 label=row["label"],
                 role=row["role"],
-                login=int(row["login"]),
+                login=str(row["login"]),
                 password=str(row["password"]),
                 server=row["server"],
                 terminal_path=row.get("terminal_path"),
+                api_base_url=row.get("api_base_url"),
+                platform=str(row.get("platform") or "mt5"),
                 enabled=row.get("enabled", True),
             )
             for row in payload.get("accounts", [])
@@ -134,7 +138,7 @@ def load_accounts() -> list[AccountConfig]:
                 id=row["id"],
                 label=row.get("label", row["id"]),
                 role=row["role"],
-                login=int(row["login"]),
+                login=str(row["login"]),
                 password=str(row["password"]),
                 server=row["server"],
                 terminal_path=row.get("terminal_path"),
@@ -231,3 +235,15 @@ def get_copiers_for_master(copiers: list[CopierConfig], master_id: str) -> list[
     return [
         c for c in copiers if c.master_id == master_id and c.enabled
     ]
+
+
+def dedupe_copiers_by_follower(copiers: list[CopierConfig]) -> list[CopierConfig]:
+    """One active copier row per follower account — avoids double copies to the same terminal."""
+    seen: set[str] = set()
+    out: list[CopierConfig] = []
+    for copier in copiers:
+        if copier.follower_id in seen:
+            continue
+        seen.add(copier.follower_id)
+        out.append(copier)
+    return out

@@ -64,8 +64,19 @@ class ControlApiClient:
         response = self._request("GET", "/internal/runtime-config")
         return response.json()
 
+    def fetch_trading_account(self, account_id: str) -> dict[str, Any]:
+        response = self._request("GET", f"/internal/trading-accounts/{account_id}")
+        return response.json()
+
     def post_execution_event(self, payload: dict[str, Any]) -> None:
         self._request("POST", "/internal/execution-events", json=payload)
+
+    def post_execution_events_batch(self, payloads: list[dict[str, Any]]) -> None:
+        self._request(
+            "POST",
+            "/internal/execution-events/batch",
+            json={"events": payloads},
+        )
 
     def register_worker(self) -> str:
         payload = {
@@ -120,6 +131,70 @@ class ControlApiClient:
 
     def stop_heartbeat_loop(self) -> None:
         self._heartbeat_stop.set()
+
+    def notify_session_started(
+        self,
+        trading_account_id: str,
+        *,
+        terminal_path: Optional[str] = None,
+        process_id: Optional[int] = None,
+    ) -> None:
+        if not self.worker_id:
+            return
+        self._request(
+            "POST",
+            "/internal/workers/session-started",
+            json={
+                "worker_id": self.worker_id,
+                "trading_account_id": trading_account_id,
+                "terminal_path": terminal_path,
+                "process_id": process_id,
+            },
+            include_user=False,
+        )
+
+    def notify_session_failed(self, trading_account_id: str, error: str) -> None:
+        if not self.worker_id:
+            return
+        self._request(
+            "POST",
+            "/internal/workers/session-failed",
+            json={
+                "worker_id": self.worker_id,
+                "trading_account_id": trading_account_id,
+                "error": error,
+            },
+            include_user=False,
+        )
+
+    def fetch_pending_commands(self) -> list[dict[str, Any]]:
+        response = self._request("GET", "/internal/worker-commands")
+        return response.json().get("commands", [])
+
+    def complete_command(
+        self,
+        command_id: str,
+        *,
+        success: bool,
+        result: Optional[dict[str, Any]] = None,
+        error: Optional[str] = None,
+    ) -> None:
+        self._request(
+            "POST",
+            f"/internal/worker-commands/{command_id}/complete",
+            json={"success": success, "result": result or {}, "error": error},
+            include_user=False,
+        )
+
+    def post_account_balances(self, accounts: list[dict[str, Any]]) -> None:
+        if not self.user_id:
+            return
+        self._request(
+            "POST",
+            "/internal/account-balances",
+            json={"user_id": self.user_id, "accounts": accounts},
+            include_user=False,
+        )
 
 
 _client: Optional[ControlApiClient] = None

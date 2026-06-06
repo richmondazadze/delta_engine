@@ -2,14 +2,17 @@ import { Integrations } from "@/components/integrations";
 import { Contact } from "@/components/contact";
 import { CallToAction } from "@/components/cta";
 import { MarketingSection } from "@/components/marketing/MarketingSection";
+import { COMPARE_PAGE } from "@/lib/marketing-content";
 
 export default function ComparePage() {
+  const { hero, support } = COMPARE_PAGE;
+
   return (
     <main>
       <MarketingSection
-        kicker="CopyMorphic Compare"
-        title="Compare brokers and prop firms in one interactive view"
-        description="Review drawdown limits, payout policies, refund terms, and program rules side by side — so you pick the right environment before routing capital."
+        kicker={hero.kicker}
+        title={hero.title}
+        description={hero.description}
         className="pt-8 md:pt-12"
       >
         <Integrations />
@@ -21,9 +24,9 @@ export default function ComparePage() {
 
       <MarketingSection
         id="contact"
-        kicker="Support"
-        title="Need help choosing the right setup?"
-        description="Our team can walk you through platform fit, account structure, and copy configuration for your workflow."
+        kicker={support.kicker}
+        title={support.title}
+        description={support.description}
         reveal={false}
       >
         <Contact />

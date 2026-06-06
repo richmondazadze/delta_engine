@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { DecorIcon } from "@/components/decor-icon";
+import { HOME_SECTIONS } from "@/lib/marketing-content";
 import { ArrowRightIcon } from "lucide-react";
 
 export function CallToAction() {
@@ -16,11 +17,10 @@ export function CallToAction() {
 			<div className="absolute top-0 left-1/2 -z-10 h-full border-l border-dashed" />
 
 			<h2 className="text-center text-3xl font-semibold tracking-tight md:text-4xl">
-				Ready to copy with full visibility?
+				{HOME_SECTIONS.cta.title}
 			</h2>
 			<p className="mx-auto max-w-2xl text-balance text-center text-lg leading-relaxed text-muted-foreground md:text-xl">
-				Create your CopyMorphic workspace, connect your accounts, and launch your first
-				copy pipeline in minutes — with risk controls and forensic logs from day one.
+				{HOME_SECTIONS.cta.description}
 			</p>
 
 			<div className="flex flex-wrap items-center justify-center gap-4">

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "@/components/icons/Icon";
 import { ForensicDrawer } from "@/components/forensic/ForensicDrawer";
-import { EmptyHint, LatencyCell, Seg, StatusBadge } from "@/components/ui";
+import { EmptyHint, Seg, StatusBadge, TimingCell } from "@/components/ui";
 import { useApp } from "@/components/shell/AppProvider";
 import { accountDisplayName, fmtClock, fmtInt } from "@/lib/format";
 import type { LogRow } from "@/lib/types";
@@ -59,15 +59,14 @@ function LedgerRows({
             {[
               "Time",
               "Status",
-              "Event Type",
-              "Copier Link",
+              "What happened",
+              "Setup",
               "Master",
-              "Follower",
-              "Symbol Map",
+              "Your account",
+              "Symbol",
               "Side",
-              "Lots R/E",
-              "Latency",
-              "Code",
+              "Size",
+              "Speed",
             ].map((h) => (
               <div key={h}>{h}</div>
             ))}
@@ -116,16 +115,11 @@ function LedgerRows({
                   <span className={exClass}>/ {r.lotsExec.toFixed(2)}</span>
                 </div>
                 <div>
-                  <LatencyCell ms={r.latency} bar />
-                </div>
-                <div
-                  className="mono"
-                  style={{
-                    fontSize: 11,
-                    color: r.status === "failed" ? "var(--error)" : "var(--muted)",
-                  }}
-                >
-                  {r.code}
+                  <TimingCell
+                    e2eMs={r.e2eMs ?? r.latency}
+                    orderMs={r.orderMs}
+                    switchMs={r.switchMs}
+                  />
                 </div>
               </div>
             );
@@ -133,6 +127,60 @@ function LedgerRows({
           <div style={{ height: (rows.length - end) * rowH }} />
         </div>
       </div>
+    </div>
+  );
+}
+
+function MobileLogList({
+  rows,
+  onRow,
+  selId,
+}: {
+  rows: LogRow[];
+  onRow: (r: LogRow) => void;
+  selId?: string;
+}) {
+  const { cpById } = useApp();
+
+  return (
+    <div className="log-mobile-list show-mobile-only">
+      {rows.length === 0 ? (
+        <p className="faint" style={{ padding: "8px 4px", fontSize: 13 }}>
+          No entries match your filters.
+        </p>
+      ) : (
+        rows.map((r) => {
+          const cp = cpById(r.copierId);
+          return (
+            <button
+              key={r.id}
+              type="button"
+              className={`log-mobile-card${selId === r.id ? " sel" : ""}`}
+              onClick={() => onRow(r)}
+            >
+              <div className="row spread" style={{ marginBottom: 6 }}>
+                <StatusBadge status={r.status} />
+                <span className="mono faint" style={{ fontSize: 11 }}>
+                  {fmtClock(r.t)}
+                </span>
+              </div>
+              <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 4 }}>{r.eventType}</div>
+              <div className="faint" style={{ fontSize: 12, marginBottom: 6 }}>
+                {cp?.label ?? "Setup"} · {r.symbol}
+                {r.side ? ` · ${r.side}` : ""}
+              </div>
+              <div className="row spread" style={{ fontSize: 12 }}>
+                <span className="mono">{r.lotsExec.toFixed(2)} lots</span>
+                <TimingCell
+                  e2eMs={r.e2eMs ?? r.latency}
+                  orderMs={r.orderMs}
+                  switchMs={r.switchMs}
+                />
+              </div>
+            </button>
+          );
+        })
+      )}
     </div>
   );
 }
@@ -173,14 +221,13 @@ export default function LogsPage() {
     });
 
   return (
-    <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
-      <div style={{ padding: "20px 22px 0", flex: "none" }}>
+    <div className="logs-page-root" style={{ height: "100%", display: "flex", flexDirection: "column" }}>
+      <div className="logs-page-head" style={{ padding: "20px 22px 0", flex: "none" }}>
         <div className="page-head" style={{ marginBottom: 14 }}>
           <div className="pt">
-            <h1>Forensic Logs</h1>
+            <h1>Copy log</h1>
             <p className="desc">
-              Every replicated signal, virtualized for high-frequency throughput. Click any row to
-              inspect.
+              A running list of trades copied to your accounts. Tap a row for full details.
             </p>
           </div>
           <div className="actions">
@@ -239,7 +286,7 @@ export default function LogsPage() {
           value={master}
           onChange={(e) => setMaster(e.target.value)}
         >
-          <option value="all">All master nodes</option>
+          <option value="all">All master accounts</option>
           {accounts.map((a) => (
             <option key={a.id} value={a.id}>
               {accountDisplayName(a.account_label, a.account_number)}
@@ -248,11 +295,16 @@ export default function LogsPage() {
         </select>
       </div>
       {accounts.length === 0 ? (
-        <EmptyHint icon="logs" title="No signals yet">
-          Link an account and deploy a copier to start streaming the audit ledger.
+        <EmptyHint icon="logs" title="No activity yet">
+          Link accounts and turn on a copier to see copy events here.
         </EmptyHint>
       ) : (
-        <LedgerRows rows={filtered} onRow={setSel} selId={sel?.id} />
+        <>
+          <div className="lg-desktop-only lg-scroll-wrap">
+            <LedgerRows rows={filtered} onRow={setSel} selId={sel?.id} />
+          </div>
+          <MobileLogList rows={filtered} onRow={setSel} selId={sel?.id} />
+        </>
       )}
       {sel && <ForensicDrawer row={sel} onClose={() => setSel(null)} />}
     </div>

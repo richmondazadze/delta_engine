@@ -68,7 +68,7 @@ export function HeroSection() {
 				</div>
 
 				<p className="text-center text-base text-muted-foreground">
-					Start free today · Cancel anytime · No setup fees
+					{HERO.footnote}
 				</p>
 			</div>
 

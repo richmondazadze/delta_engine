@@ -59,7 +59,7 @@ export function ForensicDrawer({
         <div className="drawer-head">
           <div style={{ flex: 1 }}>
             <div className="row gap8" style={{ marginBottom: 3 }}>
-              <span style={{ fontWeight: 700, fontSize: 15 }}>Event Audit Breakdown</span>
+              <span style={{ fontWeight: 700, fontSize: 15 }}>Copy event details</span>
               <StatusBadge status={row.status} />
             </div>
             <div className="mono faint" style={{ fontSize: 11.5 }}>

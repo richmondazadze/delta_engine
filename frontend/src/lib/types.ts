@@ -35,6 +35,8 @@ export interface Account {
   last_connected_at: string | null;
   last_error: string | null;
   is_enabled: boolean;
+  api_base_url?: string | null;
+  account_metadata?: Record<string, unknown>;
   created_at: string;
 }
 
@@ -89,6 +91,9 @@ export interface ExecutionEvent {
   executed_price: number | null;
   slippage_points: number | null;
   latency_ms: number | null;
+  switch_ms?: number | null;
+  order_ms?: number | null;
+  e2e_ms?: number | null;
   status: ExecutionStatus;
   broker_return_code: string | null;
   error_message: string | null;
@@ -138,6 +143,9 @@ export interface LogRow {
   lotsReq: number;
   lotsExec: number;
   latency: number;
+  e2eMs?: number | null;
+  orderMs?: number | null;
+  switchMs?: number | null;
   code: string;
   entryPrice: string;
   fillPrice: string;
@@ -154,4 +162,163 @@ export interface Toast {
   id: string;
   msg: string;
   kind: ToastKind;
+}
+
+export type AccountRole = "master" | "follower" | "standalone";
+
+export type PipelineHealth =
+  | "active"
+  | "idle"
+  | "paused"
+  | "error"
+  | "worker_offline";
+
+export interface DashboardAccount {
+  id: string;
+  label: string;
+  account_number: string;
+  platform: PlatformType;
+  connection_status: ConnectionStatus;
+  balance: number | null;
+  equity: number | null;
+  currency: string | null;
+  role: AccountRole;
+  daily_equity_change: number | null;
+  last_balance_sync_at: string | null;
+}
+
+export interface DashboardPipeline {
+  copier_id: string;
+  label: string;
+  master_account_id: string;
+  follower_account_id: string;
+  is_enabled: boolean;
+  allocation: string;
+  last_event_at: string | null;
+  last_status: string | null;
+  last_symbol: string | null;
+  health: PipelineHealth;
+}
+
+export interface DashboardActivity {
+  id: string;
+  at: string;
+  status: string | null;
+  event_type: string | null;
+  symbol: string | null;
+  side: string | null;
+  copier_id: string | null;
+  master_account_id: string | null;
+  follower_account_id: string | null;
+  latency_ms: number | null;
+  message: string;
+}
+
+export interface DashboardOnboarding {
+  has_accounts: boolean;
+  has_two_accounts: boolean;
+  has_copier: boolean;
+  has_active_copier: boolean;
+  worker_healthy: boolean;
+  has_copy_today: boolean;
+  complete: boolean;
+}
+
+export interface DashboardSummary {
+  as_of: string;
+  worker_healthy: boolean;
+  online_workers: number;
+  today: {
+    copies: number;
+    closed: number;
+    failed: number;
+    net_equity_change: number | null;
+    total_equity: number | null;
+  };
+  accounts: DashboardAccount[];
+  pipelines: DashboardPipeline[];
+  recent_activity: DashboardActivity[];
+  onboarding: DashboardOnboarding;
+  active_copiers: number;
+  connected_accounts: number;
+}
+
+export interface AdminStats {
+  users_total: number;
+  users_by_plan: Record<string, number>;
+  accounts_total: number;
+  accounts_connected: number;
+  accounts_by_status: Record<string, number>;
+  copiers_total: number;
+  copiers_active: number;
+  copies_today: number;
+  failed_today: number;
+  avg_e2e_ms_today: number | null;
+  avg_order_ms_today: number | null;
+  avg_switch_ms_today: number | null;
+  pending_commands: number;
+  online_workers: number;
+  workers_total: number;
+  active_sessions: number;
+}
+
+export interface AdminUserRow {
+  id: string;
+  email: string | null;
+  subscription_plan: string;
+  is_active_subscriber: boolean;
+  created_at: string | null;
+}
+
+export interface AdminWorkerRow {
+  id: string;
+  worker_name: string | null;
+  region: string | null;
+  host_identifier: string | null;
+  status: string | null;
+  capacity: number | null;
+  active_sessions: number | null;
+  last_heartbeat_at: string | null;
+  online: boolean;
+}
+
+export interface AdminFailedEvent {
+  id: string;
+  user_id: string;
+  event_type: string | null;
+  status: string;
+  master_ticket: string | null;
+  follower_ticket: string | null;
+  symbol_master: string | null;
+  error_message: string | null;
+  e2e_ms: number | null;
+  order_ms: number | null;
+  switch_ms: number | null;
+  created_at: string;
+}
+
+export interface AdminRecentExecution {
+  id: string;
+  user_id: string;
+  user_email?: string | null;
+  event_type: string | null;
+  status: string;
+  symbol_master: string | null;
+  copier_relation_id: string | null;
+  e2e_ms: number | null;
+  order_ms: number | null;
+  switch_ms: number | null;
+  latency_ms: number | null;
+  created_at: string;
+}
+
+export interface AdminOverview {
+  as_of: string;
+  stats: AdminStats;
+  users: AdminUserRow[];
+  workers: AdminWorkerRow[];
+  sessions: Record<string, unknown>[];
+  failed_events: AdminFailedEvent[];
+  recent_executions: AdminRecentExecution[];
+  user_emails: Record<string, string | null>;
 }

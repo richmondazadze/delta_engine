@@ -173,16 +173,15 @@ async def flatten_positions(
     if not profile.data:
         raise HTTPException(status_code=404, detail="Risk profile not found")
 
-    # TODO: Forward flatten command to worker
+    from app.services.orchestrator import queue_flatten
+
+    result = queue_flatten(profile.data["account_id"], current_user.user_id)
     logger.info(
         "flatten_requested",
         user_id=current_user.user_id,
         account_id=profile.data["account_id"],
     )
-
     return {
         "profile_id": profile_id,
-        "account_id": profile.data["account_id"],
-        "status": "queued",
-        "message": "Flatten command sent to worker.",
+        **result,
     }

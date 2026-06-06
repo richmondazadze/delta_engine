@@ -319,7 +319,7 @@ export function RiskDetailPage({ accountId }: { accountId: string }) {
 
   return (
     <div className="page-inner">
-      <Link href="/risk" className="link-action" style={{ color: "var(--muted)", marginBottom: 14 }}>
+      <Link href="/risk" className="link-action" style={{ color: "var(--text-secondary)", marginBottom: 14 }}>
         <Icon name="chevronLeft" size={14} />
         Risk Engineering
       </Link>
@@ -388,10 +388,8 @@ export function RiskDetailPage({ accountId }: { accountId: string }) {
         </div>
       </div>
       <div
+        className="grid-risk-form"
         style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr",
-          gap: 16,
           opacity: locked ? 0.55 : 1,
           pointerEvents: locked ? "none" : "auto",
         }}

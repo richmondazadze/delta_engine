@@ -61,7 +61,10 @@ def _build_api_payload(event: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         "side": event.get("side"),
         "requested_lot": event.get("requested_lot"),
         "executed_lot": event.get("executed_lot"),
-        "latency_ms": event.get("latency_ms"),
+        "latency_ms": event.get("latency_ms") or event.get("e2e_ms"),
+        "switch_ms": event.get("switch_ms"),
+        "order_ms": event.get("order_ms"),
+        "e2e_ms": event.get("e2e_ms"),
         "status": status,
         "broker_return_code": (
             str(event["broker_return_code"]) if event.get("broker_return_code") else None
@@ -93,6 +96,8 @@ def append_event(event: Dict[str, Any]) -> None:
         api_payload = _build_api_payload(event)
         if api_payload is None:
             return
-        client.post_execution_event(api_payload)
+        from engine.event_batcher import enqueue_api_payload
+
+        enqueue_api_payload(api_payload)
     except Exception as exc:
         logger.warning("execution_event_api_post_failed", error=str(exc))

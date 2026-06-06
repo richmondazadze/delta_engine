@@ -32,7 +32,7 @@ export function DashboardPreview({ className, compact = false }: Props) {
             className="size-4 opacity-90 md:size-[18px]"
           />
           <span className="font-semibold tracking-tight text-foreground/90">
-            Command Center
+            Home
           </span>
         </div>
         <span className="ml-auto rounded-sm bg-[var(--brand)]/15 px-2 py-0.5 text-[0.65rem] font-semibold text-[var(--brand)] md:text-[0.7rem]">
@@ -42,7 +42,7 @@ export function DashboardPreview({ className, compact = false }: Props) {
 
       <div className="grid gap-3 p-3 md:grid-cols-[9rem_1fr] md:gap-4 md:p-4 lg:grid-cols-[10rem_1fr]">
         <aside className="hidden space-y-1.5 md:block">
-          {["Overview", "Copiers", "Accounts", "Logs", "Risk"].map((item, i) => (
+          {["Home", "Accounts", "Copiers", "Activity", "Settings"].map((item, i) => (
             <div
               key={item}
               className={cn(

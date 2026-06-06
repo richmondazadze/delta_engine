@@ -41,6 +41,9 @@ class ExecutionEventCreate(BaseModel):
     executed_price: Optional[float] = None
     slippage_points: Optional[float] = None
     latency_ms: Optional[int] = None
+    switch_ms: Optional[int] = None
+    order_ms: Optional[int] = None
+    e2e_ms: Optional[int] = None
     status: ExecutionStatus
     broker_return_code: Optional[str] = None
     error_message: Optional[str] = None
@@ -68,6 +71,9 @@ class ExecutionEventResponse(BaseModel):
     executed_price: Optional[float] = None
     slippage_points: Optional[float] = None
     latency_ms: Optional[int] = None
+    switch_ms: Optional[int] = None
+    order_ms: Optional[int] = None
+    e2e_ms: Optional[int] = None
     status: ExecutionStatus
     broker_return_code: Optional[str] = None
     error_message: Optional[str] = None

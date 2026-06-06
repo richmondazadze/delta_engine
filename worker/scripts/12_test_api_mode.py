@@ -176,38 +176,18 @@ def test_mt5_connect(result: TestResult) -> tuple[Any, Any] | None:
     master = masters[0]
     follower = followers[0]
 
-    code, out = run_script("02_confirm_connected.py", "-a", master.id, "-s", "BTCUSDm")
+    code, out = run_script("02_confirm_connected.py", "-a", master.id, "-s", "EURUSDm")
     if code == 0:
         result.ok(f"MT5 master connect ({master.label})")
     else:
         result.fail("MT5 master connect", out[-400:])
         return None
 
-    # Follower may share terminal — use master's terminal_path if missing
-    if not follower.terminal_path and master.terminal_path:
-        follower.terminal_path = master.terminal_path
-
-    from engine.account_session import AccountSession
-
-    session = AccountSession(
-        account_id=follower.id,
-        label=follower.label,
-        role=follower.role,
-        login=follower.login,
-        password=follower.password,
-        server=follower.server,
-        terminal_path=follower.terminal_path,
-    )
-    if session.connect():
-        ok, msg = session.confirm_connected(probe_symbol="BTCUSDm")
-        session.disconnect()
-        if ok:
-            result.ok(f"MT5 follower connect ({follower.label})")
-        else:
-            result.fail("MT5 follower connect", msg)
-            return None
+    code, out = run_script("14_test_linked_account.py", "-a", follower.id, timeout=180)
+    if code == 0:
+        result.ok(f"MT5 follower connect ({follower.label})")
     else:
-        result.fail("MT5 follower connect", "connect() failed")
+        result.fail("MT5 follower connect", out[-400:])
         return None
 
     return master, follower
@@ -254,26 +234,41 @@ def test_direct_api_copy(result: TestResult, symbol: str = "BTCUSDm") -> None:
             login=a.login,
             password=a.password,
             server=a.server,
-            terminal_path=a.terminal_path or master_cfg.terminal_path,
+            terminal_path=a.terminal_path,
         )
         for a in accounts
         if a.enabled
     }
     master_session = sessions[master_cfg.id]
-    if not master_session.connect():
+
+    engine = CopierEngine()
+    engine.accounts = accounts
+    engine.copiers = load_copiers()
+    engine.symbol_mapper = SymbolMapper(load_symbol_mappings())
+    engine.ticket_mapper = TicketMapper()
+    engine._sessions = sessions
+
+    if not engine._switch_to(master_session):
         result.fail("direct API copy", "master connect failed")
         return
-
-    for sid, session in sessions.items():
-        if sid != master_cfg.id:
-            session.mark_terminal_ready()
 
     diff = StateDiffEngine(master_cfg.id)
     diff.bootstrap(master_session.connector.get_open_positions())
 
-    lot = master_session.connector.normalize_lot(symbol, 0.01) or 0.01
+    order_symbol = symbol
+    lot = master_session.connector.normalize_lot(order_symbol, 0.01)
+    if lot is None:
+        for alt in ("EURUSDm", "EURUSD", "XAUUSDm", "XAUUSD"):
+            if alt == order_symbol:
+                continue
+            lot = master_session.connector.normalize_lot(alt, 0.01)
+            if lot is not None:
+                order_symbol = alt
+                break
+    lot = lot or 0.01
+
     placed = master_session.connector.place_market_order(
-        symbol, mt5.ORDER_TYPE_BUY, lot, magic=99001
+        order_symbol, mt5.ORDER_TYPE_BUY, lot, magic=99001
     )
     if not placed or placed.get("retcode") != mt5.TRADE_RETCODE_DONE:
         master_session.disconnect()
@@ -289,17 +284,12 @@ def test_direct_api_copy(result: TestResult, symbol: str = "BTCUSDm") -> None:
         result.fail("direct API copy", "no position_opened signal after master order")
         return
 
-    engine = CopierEngine()
-    engine.accounts = accounts
-    engine.copiers = load_copiers()
-    engine.symbol_mapper = SymbolMapper(load_symbol_mappings())
-    engine.ticket_mapper = TicketMapper()
-    engine._sessions = sessions
-
     for signal in opened:
         engine._dispatch_to_followers(signal, copier_list, master_session)
 
-    master_session.disconnect()
+    if engine._current_session:
+        engine._current_session.disconnect()
+        engine._current_session = None
 
     new_lines: list[str] = []
     if os.path.exists(log_path):
@@ -310,14 +300,23 @@ def test_direct_api_copy(result: TestResult, symbol: str = "BTCUSDm") -> None:
 
     copy_ok = any(
         json.loads(line).get("event_type") == "position_opened"
+        and json.loads(line).get("status") in ("success", "rejected", "failed")
+        for line in new_lines
+        if line.strip()
+    )
+    success_only = any(
+        json.loads(line).get("event_type") == "position_opened"
         and json.loads(line).get("status") == "success"
         for line in new_lines
         if line.strip()
     )
-    if copy_ok:
+    if success_only:
         result.ok("direct API copy + execution log")
+    elif copy_ok:
+        detail = new_lines[-1] if new_lines else ""
+        result.fail("direct API copy", f"follower order not filled; last={detail[-300:]}")
     else:
-        result.fail("direct API copy", f"no success log; new lines={new_lines[-2:]}")
+        result.fail("direct API copy", f"no execution log; new lines={new_lines[-2:]}")
 
 
 def test_live_copy(result: TestResult, symbol: str = "BTCUSDm") -> None:
@@ -329,7 +328,7 @@ def main() -> int:
     load_worker_env()
     parser = argparse.ArgumentParser(description="Phase 2 API mode full test")
     parser.add_argument("--skip-mt5", action="store_true", help="Skip MT5/copy tests")
-    parser.add_argument("--symbol", default="BTCUSDm")
+    parser.add_argument("--symbol", default="EURUSDm")
     args = parser.parse_args()
 
     api_url = os.environ.get("API_URL", "http://localhost:8000").rstrip("/")

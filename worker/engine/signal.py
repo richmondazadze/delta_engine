@@ -56,3 +56,7 @@ class TradeSignal:
 
     def age_ms(self) -> int:
         return int(time.time() * 1000) - self.timestamp_ms
+
+    def refresh_timestamp(self) -> None:
+        """Reset age clock before fan-out to slow followers (terminal switching)."""
+        self.timestamp_ms = int(time.time() * 1000)

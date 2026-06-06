@@ -56,14 +56,68 @@ async def create_account(
     # Encrypt the broker password
     encrypted_pw = encrypt_password(payload.password)
 
+    from app.services.broker_server import normalize_broker_server
+
     data = {
         "user_id": current_user.user_id,
         "platform": payload.platform.value,
-        "account_number": payload.account_number,
-        "broker_server": payload.broker_server,
+        "account_number": payload.account_number.strip(),
+        "broker_server": normalize_broker_server(payload.broker_server),
         "encrypted_password": encrypted_pw,
         "account_label": payload.account_label,
     }
+    if payload.api_base_url:
+        data["api_base_url"] = payload.api_base_url.rstrip("/")
+
+    metadata: dict = {}
+    if payload.firm_slug:
+        from app.data.dxtrade_firms import get_firm
+
+        firm = get_firm(payload.firm_slug)
+        if firm:
+            metadata["firm_slug"] = firm.slug
+            metadata["firm_name"] = firm.name
+            if not data.get("api_base_url") and firm.api_base_url:
+                data["api_base_url"] = firm.api_base_url.rstrip("/")
+            if payload.platform.value == "dxtrade" and not payload.broker_server.strip():
+                data["broker_server"] = firm.default_domain
+        else:
+            metadata["firm_slug"] = payload.firm_slug
+
+    if payload.platform.value == "mt5":
+        from app.data.mt5_brokers import get_broker
+        from app.services.terminal_discovery import resolve_for_account
+
+        broker_slug = payload.broker_slug
+        broker = get_broker(broker_slug) if broker_slug else None
+        if broker and broker.default_server and not payload.broker_server.strip():
+            data["broker_server"] = broker.default_server
+
+        terminal_path, matched_broker = resolve_for_account(
+            broker_slug=broker_slug,
+            broker_server=data["broker_server"],
+            terminal_path=payload.terminal_path,
+        )
+        if terminal_path:
+            data["terminal_path"] = terminal_path
+        active_broker = broker or matched_broker
+        if active_broker:
+            metadata["broker_slug"] = active_broker.slug
+            metadata["broker_name"] = active_broker.name
+        elif broker_slug:
+            metadata["broker_slug"] = broker_slug
+
+    if payload.platform.value == "dxtrade":
+        if not data.get("api_base_url"):
+            raise HTTPException(
+                status_code=400,
+                detail="api_base_url is required for DXtrade (select a firm or enter custom URL).",
+            )
+        if not data.get("broker_server"):
+            data["broker_server"] = "default"
+
+    if metadata:
+        data["account_metadata"] = metadata
 
     result = sb.table("trading_accounts").insert(data).execute()
 
@@ -173,29 +227,24 @@ async def delete_account(
 ):
     """
     Delete a trading account.
-    This cascades to copier relations using this account.
+    Stops worker sessions, clears execution-event account links, and cascades
+    copier relations / risk profiles tied to this account.
     """
-    sb = get_supabase_admin()
+    from app.services.orchestrator import delete_trading_account
 
-    # Verify ownership
-    existing = (
-        sb.table("trading_accounts")
-        .select("id")
-        .eq("id", account_id)
-        .eq("user_id", current_user.user_id)
-        .execute()
-    )
-
-    if not existing.data:
-        raise HTTPException(status_code=404, detail="Account not found")
-
-    sb.table("trading_accounts").delete().eq("id", account_id).execute()
-
-    logger.info(
-        "account_deleted",
-        user_id=current_user.user_id,
-        account_id=account_id,
-    )
+    try:
+        delete_trading_account(account_id, current_user.user_id)
+    except ValueError as exc:
+        msg = str(exc)
+        if msg == "Account not found":
+            raise HTTPException(status_code=404, detail=msg) from exc
+        logger.error(
+            "account_delete_failed",
+            user_id=current_user.user_id,
+            account_id=account_id,
+            error=msg,
+        )
+        raise HTTPException(status_code=500, detail=msg) from exc
 
 
 @router.post("/{account_id}/test-connection")
@@ -221,12 +270,9 @@ async def test_connection(
     if not existing.data:
         raise HTTPException(status_code=404, detail="Account not found")
 
-    # TODO: Forward to worker for actual MT5 connection test
-    return {
-        "account_id": account_id,
-        "status": "pending",
-        "message": "Connection test queued. Worker will attempt connection shortly.",
-    }
+    from app.services.orchestrator import test_account_connection
+
+    return test_account_connection(account_id, current_user.user_id)
 
 
 @router.post("/{account_id}/start-session")
@@ -235,12 +281,9 @@ async def start_session(
     current_user: AuthUser = Depends(get_current_user),
 ):
     """Start a worker session for this account."""
-    # TODO: Forward to worker orchestrator
-    return {
-        "account_id": account_id,
-        "status": "queued",
-        "message": "Session start requested.",
-    }
+    from app.services.orchestrator import start_account_session
+
+    return start_account_session(account_id, current_user.user_id)
 
 
 @router.post("/{account_id}/stop-session")
@@ -249,9 +292,6 @@ async def stop_session(
     current_user: AuthUser = Depends(get_current_user),
 ):
     """Stop the worker session for this account."""
-    # TODO: Forward to worker orchestrator
-    return {
-        "account_id": account_id,
-        "status": "stopping",
-        "message": "Session stop requested.",
-    }
+    from app.services.orchestrator import stop_account_session
+
+    return stop_account_session(account_id, current_user.user_id)

@@ -4,7 +4,7 @@ State-diff engine: compares MT5 position snapshots and emits TradeSignals.
 
 from __future__ import annotations
 
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from engine.signal import PositionSnapshot, TradeSignal
 
@@ -20,13 +20,21 @@ class StateDiffEngine:
             p["ticket"]: PositionSnapshot.from_mt5_position(p) for p in positions
         }
 
-    def diff(self, positions: List[dict]) -> List[TradeSignal]:
+    def resync(self, positions: List[dict]) -> None:
+        """Update snapshot after terminal reconnect — do not emit trade signals."""
+        self.bootstrap(positions)
+
+    def diff(
+        self,
+        positions: List[dict],
+        *,
+        suppress_closes: bool = False,
+    ) -> List[TradeSignal]:
         current = {
             p["ticket"]: PositionSnapshot.from_mt5_position(p) for p in positions
         }
         events: List[TradeSignal] = []
 
-        # New or modified
         for ticket, snap in current.items():
             prev = self._snapshot.get(ticket)
             if prev is None:
@@ -86,22 +94,22 @@ class StateDiffEngine:
                         )
                     )
 
-        # Closed
-        for ticket, prev in self._snapshot.items():
-            if ticket not in current:
-                events.append(
-                    TradeSignal(
-                        event_type="position_closed",
-                        account_id=self.account_id,
-                        ticket=ticket,
-                        symbol=prev.symbol,
-                        side=prev.side,
-                        volume=prev.volume,
-                        open_price=prev.open_price,
-                        sl=prev.sl or None,
-                        tp=prev.tp or None,
+        if not suppress_closes:
+            for ticket, prev in self._snapshot.items():
+                if ticket not in current:
+                    events.append(
+                        TradeSignal(
+                            event_type="position_closed",
+                            account_id=self.account_id,
+                            ticket=ticket,
+                            symbol=prev.symbol,
+                            side=prev.side,
+                            volume=prev.volume,
+                            open_price=prev.open_price,
+                            sl=prev.sl or None,
+                            tp=prev.tp or None,
+                        )
                     )
-                )
 
         self._snapshot = current
         return events

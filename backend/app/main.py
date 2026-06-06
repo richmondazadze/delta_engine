@@ -12,6 +12,14 @@ from app.api.risk import router as risk_router
 from app.api.execution import router as execution_router
 from app.api.internal_workers import router as internal_router
 from app.api.internal_runtime import router as internal_runtime_router
+from app.api.users import router as users_router
+from app.api.analytics import router as analytics_router
+from app.api.dashboard import router as dashboard_router
+from app.api.compare import router as compare_router
+from app.api.integrations import router as integrations_router
+from app.api.admin import router as admin_router
+from app.api.billing import router as billing_router
+from app.api.symbol_mappings import router as symbol_mappings_router
 import structlog
 
 structlog.configure(
@@ -45,6 +53,14 @@ app.include_router(risk_router)
 app.include_router(execution_router)
 app.include_router(internal_router)
 app.include_router(internal_runtime_router)
+app.include_router(users_router)
+app.include_router(analytics_router)
+app.include_router(dashboard_router)
+app.include_router(compare_router)
+app.include_router(integrations_router)
+app.include_router(admin_router)
+app.include_router(billing_router)
+app.include_router(symbol_mappings_router)
 
 
 @app.get("/health")

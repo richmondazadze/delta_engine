@@ -50,6 +50,8 @@ class MT5Connector:
             logger.error("mt5_initialize_failed", error=error)
             return False
 
+        self.connected = True
+        logger.info("mt5_initialize_success", login=self.login, server=self.server)
         return True
 
     def login_account(self) -> bool:
@@ -119,17 +121,30 @@ class MT5Connector:
             return None
         return volume
 
-    def _resolve_filling_mode(self, symbol: str) -> int:
-        """Pick a supported order filling mode for the symbol."""
+    def _filling_candidates(self, symbol: str) -> list[int]:
+        """Return order filling modes to try (symbol flags != order enum values)."""
         info = self.get_symbol_info(symbol)
+        fallback = [
+            mt5.ORDER_FILLING_RETURN,
+            mt5.ORDER_FILLING_FOK,
+            mt5.ORDER_FILLING_IOC,
+        ]
         if not info:
-            return mt5.ORDER_FILLING_IOC
+            return fallback
+
         filling = int(info.get("filling_mode", 0))
-        if filling & mt5.ORDER_FILLING_IOC:
-            return mt5.ORDER_FILLING_IOC
-        if filling & mt5.ORDER_FILLING_FOK:
-            return mt5.ORDER_FILLING_FOK
-        return mt5.ORDER_FILLING_RETURN
+        candidates: list[int] = []
+        if filling & 1:
+            candidates.append(mt5.ORDER_FILLING_FOK)
+        if filling & 2:
+            candidates.append(mt5.ORDER_FILLING_IOC)
+        if filling & 4:
+            candidates.append(mt5.ORDER_FILLING_RETURN)
+        return candidates or fallback
+
+    def _resolve_filling_mode(self, symbol: str) -> int:
+        """Pick the first supported order filling mode for the symbol."""
+        return self._filling_candidates(symbol)[0]
 
     def get_open_positions(self) -> List[Dict[str, Any]]:
         """Fetch all open positions."""
@@ -171,16 +186,40 @@ class MT5Connector:
             "magic": magic,
             "comment": "Delta Engine Copy",
             "type_time": mt5.ORDER_TIME_GTC,
-            "type_filling": self._resolve_filling_mode(symbol),
         }
 
-        result = mt5.order_send(request)
-        if result.retcode != mt5.TRADE_RETCODE_DONE:
-            logger.error("mt5_order_send_failed", result=result._asdict())
-            return result._asdict()
+        last_result = None
+        for filling in self._filling_candidates(symbol):
+            request["type_filling"] = filling
+            result = mt5.order_send(request)
+            last_result = result
+            if result.retcode == mt5.TRADE_RETCODE_DONE:
+                payload = result._asdict()
+                position_ticket = int(
+                    getattr(result, "position", 0)
+                    or getattr(result, "position_id", 0)
+                    or 0
+                )
+                if not position_ticket:
+                    for pos in mt5.positions_get(symbol=symbol) or []:
+                        if int(pos.magic) == int(magic):
+                            position_ticket = int(pos.ticket)
+                            break
+                if position_ticket:
+                    payload["position_ticket"] = position_ticket
+                logger.info(
+                    "mt5_order_send_success",
+                    ticket=result.order,
+                    position_ticket=position_ticket or None,
+                    symbol=symbol,
+                    volume=volume,
+                    type=order_type,
+                    filling=filling,
+                )
+                return payload
 
-        logger.info("mt5_order_send_success", ticket=result.order, symbol=symbol, volume=volume, type=order_type)
-        return result._asdict()
+        logger.error("mt5_order_send_failed", result=last_result._asdict() if last_result else None)
+        return last_result._asdict() if last_result else None
 
     def close_position(self, ticket: int, deviation: int = 10) -> Optional[Dict[str, Any]]:
         """Close an open position fully."""

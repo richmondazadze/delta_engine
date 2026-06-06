@@ -11,6 +11,7 @@ from typing import Any, Dict, Optional
 import structlog
 
 from engine.mt5_connector import MT5Connector
+from engine.terminal_session_manager import Mt5Account, get_terminal_manager
 
 logger = structlog.get_logger()
 
@@ -30,14 +31,17 @@ class AccountSession:
     account_id: str
     label: str
     role: str
-    login: int
+    login: str
     password: str
     server: str
     terminal_path: Optional[str] = None
+    platform: str = "mt5"
+    api_base_url: Optional[str] = None
 
     def __post_init__(self):
+        mt5_login = int(self.login) if str(self.login).isdigit() else 0
         self._connector = MT5Connector(
-            login=self.login,
+            login=mt5_login,
             password=self.password,
             server=self.server,
             terminal_path=self.terminal_path,
@@ -49,28 +53,31 @@ class AccountSession:
         return self._connector
 
     def connect(self, terminal_already_running: bool = False) -> bool:
-        if not self._initialized and not terminal_already_running:
-            if not self._connector.initialize():
-                return False
-        self._initialized = True
-        if not self._connector.login_account():
+        del terminal_already_running
+        if self.platform == "dxtrade":
+            self._initialized = True
+            self._connector.connected = True
+            return True
+        mgr = get_terminal_manager()
+        if not mgr.ensure_account(Mt5Account.from_session(self)):
             return False
+        self._initialized = True
+        self._connector.connected = True
         return True
 
     def switch_login(self) -> bool:
-        """Re-login on an already-initialized terminal (multi-account dev mode)."""
-        if not self._initialized:
-            return self.connect()
-        return self._connector.login_account()
+        """Switch to this account on the shared MT5 terminal (login or re-init)."""
+        return self.connect()
 
     def mark_terminal_ready(self) -> None:
         """Mark session as sharing an already-initialized MT5 terminal."""
         self._initialized = True
+        self._connector.connected = True
 
     def disconnect(self) -> None:
-        if self._initialized:
-            self._connector.shutdown()
-            self._initialized = False
+        """Detach session without shutting down the shared MT5 IPC connection."""
+        self._initialized = False
+        self._connector.connected = False
 
     def is_connected(self) -> bool:
         return self._connector.connected and self._connector.get_account_info() is not None
@@ -114,11 +121,18 @@ class AccountSession:
         if not health.get("connected"):
             return False, f"Not connected: {health.get('last_error')}"
 
-        if int(health.get("login", 0)) != self.login:
-            return False, f"Login mismatch: expected {self.login}, got {health.get('login')}"
+        expected_login = int(self.login) if str(self.login).isdigit() else 0
+        actual_login = int(health.get("login") or 0)
+        if actual_login != expected_login:
+            return False, f"Login mismatch: expected {expected_login}, got {actual_login}"
 
-        sym = self._connector.get_symbol_info(probe_symbol)
-        if sym is None:
-            return False, f"Cannot load symbol {probe_symbol} (market data unavailable)"
+        candidates = [probe_symbol]
+        for sym in ("EURUSDm", "EURUSD", "XAUUSDm", "XAUUSD", "BTCUSDm", "BTCUSD"):
+            if sym not in candidates:
+                candidates.append(sym)
 
-        return True, "Connection confirmed"
+        for sym in candidates:
+            if self._connector.get_symbol_info(sym) is not None:
+                return True, f"Connection confirmed ({sym})"
+
+        return False, f"Cannot load symbol {probe_symbol} (market data unavailable)"

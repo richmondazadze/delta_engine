@@ -20,6 +20,19 @@ logger = structlog.get_logger()
 router = APIRouter(prefix="/api/copiers", tags=["Copiers"])
 
 
+def _queue_worker_reload(sb, user_id: str, master_account_id: str) -> None:
+    """Tell the copy worker to refresh copier enable/disable state immediately."""
+    sb.table("worker_commands").insert(
+        {
+            "user_id": user_id,
+            "trading_account_id": master_account_id,
+            "command_type": "reload_config",
+            "status": "pending",
+            "payload": {},
+        }
+    ).execute()
+
+
 @router.post("", response_model=CopierResponse, status_code=201)
 async def create_copier(
     payload: CopierCreate,
@@ -45,6 +58,29 @@ async def create_copier(
                 status_code=404,
                 detail=f"{role.capitalize()} account not found or not owned by you",
             )
+
+    master_row = (
+        sb.table("trading_accounts")
+        .select("platform, api_base_url, terminal_path, is_enabled")
+        .eq("id", payload.master_account_id)
+        .single()
+        .execute()
+    ).data
+    follower_row = (
+        sb.table("trading_accounts")
+        .select("platform, api_base_url, terminal_path, is_enabled")
+        .eq("id", payload.follower_account_id)
+        .single()
+        .execute()
+    ).data
+
+    from app.services.platform_capabilities import validate_copier_pair
+
+    errors, warnings = validate_copier_pair(master_row, follower_row)
+    if errors:
+        raise HTTPException(status_code=400, detail=" ".join(errors))
+    for msg in warnings:
+        logger.info("copier_pair_warning", message=msg, user_id=current_user.user_id)
 
     # Check follower limit
     user_profile = (
@@ -228,8 +264,10 @@ async def enable_copier(
     if not result.data:
         raise HTTPException(status_code=404, detail="Copier relation not found")
 
+    row = result.data[0]
+    _queue_worker_reload(sb, current_user.user_id, row["master_account_id"])
     logger.info("copier_enabled", copier_id=copier_id)
-    return CopierResponse(**result.data[0])
+    return CopierResponse(**row)
 
 
 @router.post("/{copier_id}/disable", response_model=CopierResponse)
@@ -251,5 +289,7 @@ async def disable_copier(
     if not result.data:
         raise HTTPException(status_code=404, detail="Copier relation not found")
 
+    row = result.data[0]
+    _queue_worker_reload(sb, current_user.user_id, row["master_account_id"])
     logger.info("copier_disabled", copier_id=copier_id)
-    return CopierResponse(**result.data[0])
+    return CopierResponse(**row)

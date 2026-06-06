@@ -1,12 +1,14 @@
 "use client";
 
 import {
+  useCallback,
   useEffect,
   useRef,
   useState,
   type CSSProperties,
   type ReactNode,
 } from "react";
+import { createPortal } from "react-dom";
 import { Icon, type IconName } from "@/components/icons/Icon";
 import { latClass } from "@/lib/format";
 
@@ -18,6 +20,8 @@ const BADGE_MAP: Record<string, [string, string]> = {
   Connected: ["badge-ok", "Connected"],
   Disconnected: ["badge-muted", "Disconnected"],
   "Auth Failed": ["badge-err", "Auth Failed"],
+  "Terminal Unavailable": ["badge-warn", "Terminal Unavailable"],
+  "Broker Unavailable": ["badge-warn", "Broker Unavailable"],
   Locked: ["badge-err", "Locked"],
   active: ["badge-ok", "Active"],
   paused: ["badge-muted", "Paused"],
@@ -54,6 +58,38 @@ export function LatencyCell({ ms, bar = false }: { ms: number; bar?: boolean }) 
       {bar && (
         <span className="lat-bar">
           <i style={{ width: `${pct}%`, background: color }} />
+        </span>
+      )}
+    </span>
+  );
+}
+
+export function TimingCell({
+  e2eMs,
+  orderMs,
+  switchMs,
+  compact = false,
+}: {
+  e2eMs?: number | null;
+  orderMs?: number | null;
+  switchMs?: number | null;
+  compact?: boolean;
+}) {
+  const total = e2eMs ?? orderMs ?? switchMs;
+  if (total == null || total <= 0) return <span className="faint">—</span>;
+
+  const tip =
+    orderMs != null || switchMs != null
+      ? `Total ${e2eMs ?? total} ms · Broker ${orderMs ?? "—"} ms · Switch ${switchMs ?? "—"} ms`
+      : undefined;
+
+  return (
+    <span className="timing-cell" title={tip}>
+      <LatencyCell ms={total} bar={!compact} />
+      {compact && (orderMs != null || switchMs != null) && (
+        <span className="timing-sub mono faint">
+          {orderMs != null ? `brk ${orderMs}` : ""}
+          {switchMs != null ? `${orderMs != null ? " · " : ""}sw ${switchMs}` : ""}
         </span>
       )}
     </span>
@@ -143,12 +179,21 @@ function ContextMenu({
   items,
   onClose,
   anchorStyle,
+  closing = false,
 }: {
   items: CtxItem[];
   onClose: () => void;
   anchorStyle?: CSSProperties;
+  closing?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  const [entered, setEntered] = useState(false);
+
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setEntered(true));
+    return () => cancelAnimationFrame(id);
+  }, []);
+
   useEffect(() => {
     const h = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) onClose();
@@ -165,7 +210,12 @@ function ContextMenu({
   }, [onClose]);
 
   return (
-    <div className="ctx" ref={ref} style={anchorStyle}>
+    <div
+      className={`ctx${entered && !closing ? " is-open" : ""}${closing ? " is-closing" : ""}`}
+      ref={ref}
+      style={anchorStyle}
+      role="menu"
+    >
       {items.map((it, i) =>
         it.sep ? (
           <div key={i} className="ctx-sep" />
@@ -190,27 +240,90 @@ function ContextMenu({
 
 export function Kebab({ items }: { items: CtxItem[] }) {
   const [open, setOpen] = useState(false);
+  const [closing, setClosing] = useState(false);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const updatePos = useCallback(() => {
+    const el = btnRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const estimatedHeight = Math.min(320, items.length * 36 + 16);
+    const below = r.bottom + 6;
+    const fitsBelow = below + estimatedHeight <= window.innerHeight - 8;
+    const top = fitsBelow ? below : Math.max(8, r.top - estimatedHeight - 6);
+    setMenuPos({ top, left: r.right });
+  }, [items.length]);
+
+  const closeMenu = useCallback(() => {
+    if (!open || closing) return;
+    setClosing(true);
+    closeTimer.current = setTimeout(() => {
+      setOpen(false);
+      setClosing(false);
+      setMenuPos(null);
+    }, 150);
+  }, [open, closing]);
+
+  useEffect(() => {
+    return () => {
+      if (closeTimer.current) clearTimeout(closeTimer.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    updatePos();
+    const onLayout = () => updatePos();
+    window.addEventListener("scroll", onLayout, true);
+    window.addEventListener("resize", onLayout);
+    return () => {
+      window.removeEventListener("scroll", onLayout, true);
+      window.removeEventListener("resize", onLayout);
+    };
+  }, [open, updatePos]);
+
   return (
-    <div style={{ position: "relative" }}>
+    <>
       <button
+        ref={btnRef}
         type="button"
         className="icon-btn"
-        style={{ width: 30, height: 30 }}
+        style={{ width: 30, height: 30, position: "relative", zIndex: open ? 2 : undefined }}
         onClick={(e) => {
           e.stopPropagation();
-          setOpen(!open);
+          if (open) {
+            closeMenu();
+            return;
+          }
+          if (closeTimer.current) clearTimeout(closeTimer.current);
+          setClosing(false);
+          updatePos();
+          setOpen(true);
         }}
+        aria-expanded={open}
+        aria-haspopup="menu"
       >
         <Icon name="dots" size={16} />
       </button>
-      {open && (
-        <ContextMenu
-          items={items}
-          onClose={() => setOpen(false)}
-          anchorStyle={{ right: 0, top: 34 }}
-        />
-      )}
-    </div>
+      {open && menuPos && typeof document !== "undefined"
+        ? createPortal(
+            <ContextMenu
+              items={items}
+              onClose={closeMenu}
+              closing={closing}
+              anchorStyle={{
+                position: "fixed",
+                top: menuPos.top,
+                right: window.innerWidth - menuPos.left,
+                zIndex: 10000,
+              }}
+            />,
+            document.body,
+          )
+        : null}
+    </>
   );
 }
 
@@ -264,13 +377,25 @@ export function ConfirmModal({
   confirmWord: string;
   confirmLabel?: string;
   danger?: boolean;
-  onConfirm: () => void;
+  onConfirm: () => void | Promise<void>;
   onCancel: () => void;
 }) {
   const [val, setVal] = useState("");
+  const [busy, setBusy] = useState(false);
   const ok = val.trim() === confirmWord;
+
+  const submit = async () => {
+    if (!ok || busy) return;
+    setBusy(true);
+    try {
+      await onConfirm();
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
-    <Modal onClose={onCancel}>
+    <Modal onClose={busy ? () => {} : onCancel}>
       <div className="modal-pad">
         <div className="row gap10" style={{ marginBottom: 4 }}>
           <div
@@ -303,10 +428,11 @@ export function ConfirmModal({
             className="inp mono"
             value={val}
             autoFocus
+            disabled={busy}
             onChange={(e) => setVal(e.target.value)}
             placeholder={confirmWord}
             onKeyDown={(e) => {
-              if (e.key === "Enter" && ok) onConfirm();
+              if (e.key === "Enter" && ok) void submit();
             }}
           />
         </div>
@@ -315,18 +441,19 @@ export function ConfirmModal({
         <button
           type="button"
           className="link-action"
-          style={{ color: "var(--muted)" }}
+          style={{ color: "var(--text-secondary)" }}
           onClick={onCancel}
+          disabled={busy}
         >
           Cancel
         </button>
         <button
           type="button"
           className={`btn ${danger ? "btn-danger" : "btn-dark"}`}
-          disabled={!ok}
-          onClick={onConfirm}
+          disabled={!ok || busy}
+          onClick={() => void submit()}
         >
-          {confirmLabel}
+          {busy ? "Working…" : confirmLabel}
         </button>
       </div>
     </Modal>
@@ -386,7 +513,7 @@ export function EmptyHint({
   children?: ReactNode;
 }) {
   return (
-    <div style={{ textAlign: "center", padding: "48px 24px", color: "var(--muted)" }}>
+    <div style={{ textAlign: "center", padding: "48px 24px", color: "var(--text-secondary)" }}>
       {icon && (
         <div className="empty-ico" style={{ display: "inline-flex", marginBottom: 12 }}>
           <Icon name={icon} size={34} stroke={1.5} />
@@ -410,3 +537,11 @@ export function Meter({ pct, color }: { pct: number; color?: string }) {
     </div>
   );
 }
+
+export {
+  AnimatedViewMode,
+  StaggerItem,
+  useViewMode,
+  ViewModeToggle,
+  type ViewMode,
+} from "./ViewModeSwitch";

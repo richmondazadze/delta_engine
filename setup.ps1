@@ -26,6 +26,7 @@ if (Get-Command py -ErrorAction SilentlyContinue) {
 }
 
 # Backend: MUST use 3.12 (pydantic-core has no wheels for 3.14 yet)
+
 $BackendPython = Ensure-Python312
 
 Write-Host "=== Delta Engine Dev Setup ===" -ForegroundColor Cyan

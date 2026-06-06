@@ -60,7 +60,7 @@
 }
 
 .mk-nav-links a {
-  color: var(--muted);
+  color: var(--text-secondary);
   text-decoration: none;
   transition: color 160ms var(--ease-out-strong);
 }
@@ -222,7 +222,7 @@
   margin: 0 0 28px;
   font-size: clamp(1rem, 1.55vw, 1.125rem);
   line-height: 1.55;
-  color: var(--muted);
+  color: var(--text-secondary);
   max-width: 40ch;
 }
 
@@ -283,7 +283,7 @@
 .mk-proof-text {
   font-size: 13px;
   font-weight: 500;
-  color: var(--muted);
+  color: var(--text-secondary);
 }
 
 /* ── Sections ── */
@@ -323,7 +323,7 @@
     margin: 0;
     font-size: 15px;
     line-height: 1.55;
-    color: var(--muted);
+    color: var(--text-secondary);
   }
 }
 
@@ -337,7 +337,7 @@
 
 .mk-section-head p {
   margin: 0;
-  color: var(--muted);
+  color: var(--text-secondary);
   line-height: 1.55;
   font-size: 15px;
 }
@@ -405,7 +405,7 @@
   margin: 0;
   font-size: 13px;
   line-height: 1.55;
-  color: var(--muted);
+  color: var(--text-secondary);
 }
 
 .mk-feature-accent {
@@ -471,7 +471,7 @@
   margin: 0;
   font-size: 13px;
   line-height: 1.55;
-  color: var(--muted);
+  color: var(--text-secondary);
 }
 
 /* ── Comparison ── */
@@ -505,7 +505,7 @@
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.07em;
-  color: var(--muted);
+  color: var(--text-secondary);
 }
 
 .mk-compare-col.highlight h3 {
@@ -605,7 +605,7 @@
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--muted);
+  color: var(--text-secondary);
 }
 
 .mk-plan-price {
@@ -618,12 +618,12 @@
 .mk-plan-price span {
   font-size: 13px;
   font-weight: 500;
-  color: var(--muted);
+  color: var(--text-secondary);
 }
 
 .mk-plan-limits {
   font-size: 12px;
-  color: var(--muted);
+  color: var(--text-secondary);
   line-height: 1.45;
   padding-bottom: 4px;
   border-bottom: 1px solid var(--border);
@@ -638,7 +638,7 @@
   flex-direction: column;
   gap: 10px;
   font-size: 12px;
-  color: var(--muted);
+  color: var(--text-secondary);
 }
 
 .mk-plan ul li {
@@ -723,7 +723,7 @@
 .mk-footer-brand p {
   margin: 14px 0 0;
   font-size: 13px;
-  color: var(--muted);
+  color: var(--text-secondary);
   line-height: 1.55;
   max-width: 30ch;
 }
@@ -748,7 +748,7 @@
 
 .mk-footer-col a {
   font-size: 13px;
-  color: var(--muted);
+  color: var(--text-secondary);
   text-decoration: none;
   transition: color 160ms var(--ease-out-strong);
 }

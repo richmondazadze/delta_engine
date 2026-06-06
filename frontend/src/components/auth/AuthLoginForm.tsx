@@ -19,6 +19,7 @@ function LoginFormInner() {
   const router = useRouter();
   const params = useSearchParams();
   const next = params.get("next") || "/dashboard";
+  const callbackError = params.get("error");
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -106,6 +107,12 @@ function LoginFormInner() {
           </InputGroupAddon>
         </InputGroup>
 
+        {callbackError === "auth_callback" && !error ? (
+          <p className="rounded-sm border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            Sign-in could not be completed. Try email/password or check OAuth redirect URLs in
+            Supabase.
+          </p>
+        ) : null}
         {error ? (
           <p className="rounded-sm border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
             {error}

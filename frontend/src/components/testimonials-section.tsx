@@ -18,7 +18,7 @@ type Testimonial = {
 const testimonials: Testimonial[] = [
 	{
 		quote:
-			"Copy paths execute before I can blink. The control over latency and logs is exactly what we needed.",
+			"Analyzer showed us we were celebrating green days while drawdown was creeping up on three accounts. We cut two copy paths and scaled the one that actually had edge.",
 		image: "https://unavatar.io/x/tim_cook",
 		name: "A. Rahman",
 		role: "Prop Trader",
@@ -26,7 +26,7 @@ const testimonials: Testimonial[] = [
 	},
 	{
 		quote:
-			"We replaced scattered VPS scripts with one dashboard. Monitoring and accountability improved instantly.",
+			"We replaced scattered VPS scripts with one copier dashboard. Execution logs and latency visibility changed how we run multi-account operations.",
 		image: "https://unavatar.io/x/JeffBezos",
 		name: "M. Costa",
 		role: "Operations Lead",
@@ -34,7 +34,7 @@ const testimonials: Testimonial[] = [
 	},
 	{
 		quote:
-			"Analyzer insights made it obvious which strategies were stable and which ones were leaking risk.",
+			"Compare saved us weeks of prop firm research. We picked the right program, mapped symbols once, and had copy paths live the same day.",
 		image: "https://unavatar.io/x/sama",
 		name: "J. Bennett",
 		role: "Portfolio Manager",

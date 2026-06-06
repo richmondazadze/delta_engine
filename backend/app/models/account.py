@@ -4,7 +4,7 @@ Request/response schemas for trading account management.
 """
 
 from datetime import datetime
-from typing import Optional
+from typing import Any, Optional
 from pydantic import BaseModel, Field
 from enum import Enum
 
@@ -45,6 +45,26 @@ class AccountCreate(BaseModel):
     broker_server: str = Field(..., min_length=1, max_length=255)
     password: str = Field(..., min_length=1, description="Broker password — encrypted before storage")
     account_label: Optional[str] = Field(None, max_length=100)
+    api_base_url: Optional[str] = Field(
+        None,
+        max_length=512,
+        description="REST API root for DXtrade (e.g. https://dxtrade.ftmo.com)",
+    )
+    firm_slug: Optional[str] = Field(
+        None,
+        max_length=64,
+        description="DXtrade prop firm preset slug (e.g. ftmo, lark)",
+    )
+    broker_slug: Optional[str] = Field(
+        None,
+        max_length=64,
+        description="MT5 broker preset slug (e.g. moneta_markets, ftmo, exness)",
+    )
+    terminal_path: Optional[str] = Field(
+        None,
+        max_length=512,
+        description="Path to broker-specific terminal64.exe (auto-detected when possible)",
+    )
 
 
 class AccountUpdate(BaseModel):
@@ -72,6 +92,8 @@ class AccountResponse(BaseModel):
     last_connected_at: Optional[datetime] = None
     last_error: Optional[str] = None
     is_enabled: bool = True
+    api_base_url: Optional[str] = None
+    account_metadata: Optional[dict[str, Any]] = None
     created_at: datetime
 
     class Config:

@@ -55,15 +55,51 @@ export function executionUiStatus(status: ExecutionStatus): string {
   return map[status] ?? "pending";
 }
 
+export function humanEventType(eventType: string | null | undefined): string {
+  const map: Record<string, string> = {
+    open: "Trade opened",
+    close: "Trade closed",
+    modify: "Stop / target changed",
+    partial_close: "Partial close",
+    balance: "Balance update",
+  };
+  if (!eventType) return "—";
+  return map[eventType] ?? eventType.replace(/_/g, " ");
+}
+
+export function humanExecutionStatus(status: string | null | undefined): string {
+  const map: Record<string, string> = {
+    success: "Copied",
+    closed: "Closed",
+    pending: "Pending",
+    failed: "Failed",
+    rejected: "Rejected",
+    skipped_risk: "Skipped (risk)",
+    skipped_slippage: "Skipped (slippage)",
+    duplicate_ignored: "Duplicate ignored",
+    partial: "Partial fill",
+    modified: "Updated",
+  };
+  if (!status) return "—";
+  return map[status] ?? status.replace(/_/g, " ");
+}
+
+export function fmtSpeedMs(ms: number | null | undefined): string {
+  if (ms == null || ms <= 0) return "—";
+  if (ms < 1000) return `${Math.round(ms)} ms`;
+  return `${(ms / 1000).toFixed(1)} s`;
+}
+
 export function executionEventToLogRow(e: ExecutionEvent): import("./types").LogRow {
   const side = e.side
     ? e.side.charAt(0).toUpperCase() + e.side.slice(1).toLowerCase()
     : "—";
+  const speedMs = e.e2e_ms ?? e.latency_ms ?? 0;
   return {
     id: e.id,
     t: new Date(e.created_at),
     status: executionUiStatus(e.status),
-    eventType: e.event_type,
+    eventType: humanEventType(e.event_type),
     copierId: e.copier_relation_id ?? "",
     masterTicket: e.master_ticket ?? "—",
     followerTicket: e.follower_ticket ?? "",
@@ -72,7 +108,10 @@ export function executionEventToLogRow(e: ExecutionEvent): import("./types").Log
     side,
     lotsReq: e.requested_lot ?? 0,
     lotsExec: e.executed_lot ?? 0,
-    latency: e.latency_ms ?? 0,
+    latency: speedMs,
+    e2eMs: e.e2e_ms ?? e.latency_ms ?? null,
+    orderMs: e.order_ms ?? null,
+    switchMs: e.switch_ms ?? null,
     code: e.broker_return_code ?? "—",
     entryPrice: e.requested_price?.toString() ?? "—",
     fillPrice: e.executed_price?.toString() ?? "—",
@@ -93,8 +132,20 @@ export function initials(email: string): string {
   return part.slice(0, 2).toUpperCase();
 }
 
+import { platformDisplayName, platformShortName } from "@/lib/platforms";
+
+export function fmtPctChange(current: number, baseline: number | null | undefined): string {
+  if (baseline == null || baseline === 0) return "—";
+  const pct = ((current - baseline) / Math.abs(baseline)) * 100;
+  const sign = pct >= 0 ? "+" : "";
+  return `${sign}${pct.toFixed(2)}% today`;
+}
+
+export function riskAllocationShort(c: import("./types").Copier): string {
+  if (c.risk_mode === "multiplier") return `${c.multiplier.toFixed(2)}x`;
+  return `${c.fixed_lot_size.toFixed(2)} lots`;
+}
+
 export function platformLabel(platform: string): string {
-  if (platform === "mt5") return "MT5";
-  if (platform === "mt4") return "MT4";
-  return platform.toUpperCase();
+  return platformShortName(platform) || platformDisplayName(platform);
 }

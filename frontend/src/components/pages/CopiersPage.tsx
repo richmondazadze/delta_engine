@@ -1,62 +1,373 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Icon } from "@/components/icons/Icon";
-import {
-  ConfirmModal,
-  EmptyHint,
-  Kebab,
-  Tip,
-  Toggle,
-} from "@/components/ui";
+import { ConfirmModal, EmptyHint, Toggle } from "@/components/ui";
 import { useApp, useAccessToken } from "@/components/shell/AppProvider";
-import { accountDisplayName } from "@/lib/format";
+import { accountDisplayName, fmtMoney } from "@/lib/format";
+import {
+  accountOptionLabel,
+  crossPlatformCopyHint,
+} from "@/lib/platform-capabilities";
+import {
+  copierEngineStats,
+  groupCopiersByMaster,
+  riskAllocationDisplay,
+} from "@/lib/copier-engine";
 import * as api from "@/lib/data";
-import type { Copier } from "@/lib/types";
+import type { Account, Copier } from "@/lib/types";
+import { PlatformBadge } from "@/components/PlatformIcon";
 
-function RuleIcons({ rules }: { rules: { sl: boolean; tp: boolean; close: boolean; modify: boolean } }) {
-  const map: [keyof typeof rules, "shield" | "target" | "power" | "edit", string][] = [
-    ["sl", "shield", "Stop Loss"],
-    ["tp", "target", "Take Profit"],
-    ["close", "power", "Manual Close"],
-    ["modify", "edit", "Modify"],
-  ];
+function accountShortName(a: Account | undefined) {
+  if (!a) return "—";
+  return accountDisplayName(a.account_label, a.account_number);
+}
+
+function SummaryStrip({
+  portfolioValue,
+  masters,
+  followers,
+  active,
+}: {
+  portfolioValue: number | null;
+  masters: number;
+  followers: number;
+  active: number;
+}) {
   return (
-    <div className="row gap6">
-      {map.map(([k, ic, label]) => (
-        <Tip key={k} text={`${label}${rules[k] ? " · on" : " · off"}`}>
-          <span
-            style={{
-              display: "flex",
-              color: rules[k] ? "var(--accent)" : "var(--border-strong)",
-            }}
+    <div className="summary-strip">
+      <div className="summary-stat">
+        <div className="ss-label">Portfolio value</div>
+        <div className="ss-value">{portfolioValue != null ? fmtMoney(portfolioValue) : "—"}</div>
+        <div className="ss-sub">Combined account equity</div>
+      </div>
+      <div className="summary-stat">
+        <div className="ss-label">Masters</div>
+        <div className="ss-value">{masters}</div>
+        <div className="ss-sub">Accounts you copy from</div>
+      </div>
+      <div className="summary-stat">
+        <div className="ss-label">Followers</div>
+        <div className="ss-value">{followers}</div>
+        <div className="ss-sub">Accounts receiving copies</div>
+      </div>
+      <div className="summary-stat">
+        <div className="ss-label">Active links</div>
+        <div className="ss-value">{active}</div>
+        <div className="ss-sub">Copying right now</div>
+      </div>
+    </div>
+  );
+}
+
+function FollowerRow({
+  c,
+  master,
+  masterName,
+  follower,
+  onToggle,
+  onEdit,
+  onDelete,
+}: {
+  c: Copier;
+  master: Account | undefined;
+  masterName: string;
+  follower: Account | undefined;
+  onToggle: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  const risk = riskAllocationDisplay(c);
+
+  return (
+    <tr className="follower-row">
+      <td>
+        <span className="badge badge-follower">Follower</span>
+      </td>
+      <td>
+        <div className="label-stack">
+          <span className="lab">{c.label || accountShortName(follower)}</span>
+          <span className="id">{follower?.account_number ?? "—"}</span>
+        </div>
+      </td>
+      <td>
+        <div className="row gap6">
+          <span>{masterName}</span>
+          {master && <PlatformBadge platformId={master.platform} size="md" />}
+        </div>
+      </td>
+      <td>{risk.type}</td>
+      <td className="mono">{risk.setting}</td>
+      <td>
+        <Toggle on={c.is_enabled} onChange={onToggle} />
+      </td>
+      <td>
+        <div className="row-actions">
+          <button type="button" className="btn-row" onClick={onEdit}>
+            <Icon name="edit" size={13} />
+            Edit
+          </button>
+          <button type="button" className="btn-row" onClick={onToggle}>
+            <Icon name={c.is_enabled ? "stop" : "play"} size={13} />
+            {c.is_enabled ? "Pause" : "Resume"}
+          </button>
+          <button type="button" className="btn-row danger" onClick={onDelete}>
+            <Icon name="trash" size={13} />
+            Delete
+          </button>
+        </div>
+      </td>
+    </tr>
+  );
+}
+
+function MasterGroupBlock({
+  group,
+  expanded,
+  onToggleExpand,
+  onToggleMaster,
+  onToggleCopier,
+  onEdit,
+  onDelete,
+  accById,
+}: {
+  group: ReturnType<typeof groupCopiersByMaster>[number];
+  expanded: boolean;
+  onToggleExpand: () => void;
+  onToggleMaster: () => void;
+  onEdit: (c: Copier) => void;
+  onDelete: (c: Copier) => void;
+  onToggleCopier: (c: Copier) => void;
+  accById: (id: string) => Account | undefined;
+}) {
+  const masterName = accountShortName(group.master);
+
+  return (
+    <>
+        <tr className={`master-row${expanded ? " is-expanded" : ""}`}>
+        <td>
+          <button
+            type="button"
+            className={`expand-btn${expanded ? " open" : ""}`}
+            onClick={onToggleExpand}
+            aria-label={expanded ? "Collapse followers" : "Expand followers"}
           >
-            <Icon name={ic} size={15} />
-          </span>
-        </Tip>
-      ))}
+            <Icon name="chevronRight" size={14} />
+          </button>
+        </td>
+        <td>
+          <span className="badge badge-master">Master</span>
+        </td>
+        <td colSpan={2}>
+          <div className="row gap8">
+            <span className="master-name">{masterName}</span>
+            {group.master && <PlatformBadge platformId={group.master.platform} size="md" />}
+          </div>
+        </td>
+        <td className="faint">{group.copiers.length} follower{group.copiers.length !== 1 ? "s" : ""}</td>
+        <td>
+          <Toggle on={group.anyEnabled} onChange={onToggleMaster} />
+        </td>
+        <td>
+          <div className="row-actions">
+            <Link
+              href={`/copiers/new?master=${group.masterId}`}
+              className="btn-row"
+            >
+              <Icon name="plus" size={13} />
+              Add follower
+            </Link>
+          </div>
+        </td>
+      </tr>
+      {expanded && (
+        <tr className="follower-group">
+          <td colSpan={7}>
+            <div className="follower-group-inner">
+              <div className="follower-group-label">Follower accounts</div>
+              <div className="follower-group-table-wrap">
+              <table className="copier-engine-table copier-engine-table-nested">
+                <thead>
+                  <tr>
+                    <th style={{ width: 90 }}>Role</th>
+                    <th>Setup</th>
+                    <th>Copy from</th>
+                    <th>Risk type</th>
+                    <th>Size</th>
+                    <th style={{ width: 70 }}>On</th>
+                    <th style={{ width: 240 }}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {group.copiers.map((c) => (
+                    <FollowerRow
+                      key={c.id}
+                      c={c}
+                      master={group.master}
+                      masterName={masterName}
+                      follower={accById(c.follower_account_id)}
+                      onToggle={() => onToggleCopier(c)}
+                      onEdit={() => onEdit(c)}
+                      onDelete={() => onDelete(c)}
+                    />
+                  ))}
+                </tbody>
+              </table>
+              </div>
+            </div>
+          </td>
+        </tr>
+      )}
+    </>
+  );
+}
+
+function CopierMobileList({
+  groups,
+  accById,
+  onToggleMaster,
+  onToggleCopier,
+  onEdit,
+  onDelete,
+}: {
+  groups: ReturnType<typeof groupCopiersByMaster>;
+  accById: (id: string) => Account | undefined;
+  onToggleMaster: (g: (typeof groups)[number]) => void;
+  onToggleCopier: (c: Copier) => void;
+  onEdit: (c: Copier) => void;
+  onDelete: (c: Copier) => void;
+}) {
+  return (
+    <div className="copier-mobile-list">
+      {groups.map((group) => {
+        const masterName = accountShortName(group.master);
+        return (
+          <div key={group.masterId} className="copier-mobile-master">
+            <div className="copier-mobile-master-head">
+              <div className="row spread" style={{ marginBottom: 10 }}>
+                <div className="row gap8">
+                  <span className="badge badge-master">Master</span>
+                  {group.master && <PlatformBadge platformId={group.master.platform} size="md" />}
+                </div>
+                <Toggle on={group.anyEnabled} onChange={() => onToggleMaster(group)} />
+              </div>
+              <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 8 }}>{masterName}</div>
+              <div className="row gap8">
+                <Link
+                  href={`/copiers/new?master=${group.masterId}`}
+                  className="btn btn-ghost btn-sm"
+                >
+                  <Icon name="plus" size={13} />
+                  Add follower
+                </Link>
+                <span className="faint" style={{ fontSize: 12 }}>
+                  {group.copiers.length} follower{group.copiers.length !== 1 ? "s" : ""}
+                </span>
+              </div>
+            </div>
+            <div className="copier-mobile-followers">
+              {group.copiers.map((c) => {
+                const follower = accById(c.follower_account_id);
+                const risk = riskAllocationDisplay(c);
+                return (
+                  <div key={c.id} className="copier-mobile-follower">
+                    <div className="row spread" style={{ marginBottom: 8 }}>
+                      <span className="badge badge-follower">Follower</span>
+                      <Toggle on={c.is_enabled} onChange={() => onToggleCopier(c)} />
+                    </div>
+                    <div style={{ fontWeight: 600, fontSize: 13.5, marginBottom: 4 }}>
+                      {c.label || accountShortName(follower)}
+                    </div>
+                    <div className="faint mono" style={{ fontSize: 11, marginBottom: 8 }}>
+                      {follower?.account_number}
+                    </div>
+                    <dl className="copier-mobile-meta">
+                      <div>
+                        <dt>Risk</dt>
+                        <dd>{risk.type}</dd>
+                      </div>
+                      <div>
+                        <dt>Size</dt>
+                        <dd>{risk.setting}</dd>
+                      </div>
+                    </dl>
+                    <div className="row-actions">
+                      <button type="button" className="btn-row" onClick={() => onEdit(c)}>
+                        Edit
+                      </button>
+                      <button type="button" className="btn-row" onClick={() => onToggleCopier(c)}>
+                        {c.is_enabled ? "Pause" : "Resume"}
+                      </button>
+                      <button type="button" className="btn-row danger" onClick={() => onDelete(c)}>
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
 
 export default function CopiersPage() {
   const router = useRouter();
-  const { accounts, copiers, accById, refreshAll, toast } = useApp();
+  const { accounts, copiers, accById, dashboard, refreshAll, toast } = useApp();
   const getToken = useAccessToken();
   const [confirmDel, setConfirmDel] = useState<Copier | null>(null);
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
 
-  const toggle = async (c: Copier) => {
+  const groups = useMemo(
+    () => groupCopiersByMaster(copiers, accById),
+    [copiers, accById],
+  );
+
+  useEffect(() => {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      for (const g of groups) next.add(g.masterId);
+      return next;
+    });
+  }, [groups]);
+
+  const stats = copierEngineStats(
+    copiers,
+    accounts,
+    dashboard?.today?.total_equity,
+  );
+
+  const toggleCopier = async (c: Copier) => {
     try {
       const token = await getToken();
       if (!token) throw new Error("Not authenticated");
-      if (c.is_enabled) await api.disableCopier(token, c.id);
+      const wasEnabled = c.is_enabled;
+      if (wasEnabled) await api.disableCopier(token, c.id);
       else await api.enableCopier(token, c.id);
-      toast(c.is_enabled ? "Copier suspended" : "Copier activated", "ok");
+      toast(wasEnabled ? "Copying paused" : "Copying resumed", "ok");
       await refreshAll();
     } catch (e) {
-      toast(e instanceof Error ? e.message : "Toggle failed", "err");
+      toast(e instanceof Error ? e.message : "Could not update setup", "err");
+    }
+  };
+
+  const toggleMasterGroup = async (group: (typeof groups)[number]) => {
+    const enable = !group.anyEnabled;
+    try {
+      const token = await getToken();
+      if (!token) throw new Error("Not authenticated");
+      for (const c of group.copiers) {
+        if (enable && !c.is_enabled) await api.enableCopier(token, c.id);
+        if (!enable && c.is_enabled) await api.disableCopier(token, c.id);
+      }
+      toast(enable ? "All followers resumed" : "All followers paused", "ok");
+      await refreshAll();
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Could not update group", "err");
     }
   };
 
@@ -66,7 +377,7 @@ export default function CopiersPage() {
       const token = await getToken();
       if (!token) throw new Error("Not authenticated");
       await api.deleteCopier(token, confirmDel.id);
-      toast("Copier link deleted", "ok");
+      toast("Copy setup removed", "ok");
       setConfirmDel(null);
       await refreshAll();
     } catch (e) {
@@ -78,138 +389,109 @@ export default function CopiersPage() {
     <div className="page-inner">
       <div className="page-head">
         <div className="pt">
-          <h1>Copier Links</h1>
+          <h1>Copy engine</h1>
           <p className="desc">
-            Route trades from a master terminal to one or more followers with precise allocation
-            and risk rules.
+            Manage master accounts and the followers that mirror their trades. Turn copying on or off anytime.
           </p>
         </div>
         <div className="actions">
           <Link
             href={accounts.length < 2 ? "#" : "/copiers/new"}
-            className={`btn btn-dark${accounts.length < 2 ? " disabled" : ""}`}
+            className={`btn btn-accent${accounts.length < 2 ? " disabled" : ""}`}
             aria-disabled={accounts.length < 2}
             onClick={(e) => accounts.length < 2 && e.preventDefault()}
           >
             <Icon name="plus" size={15} />
-            Create Copier Link
+            Add copy setup
           </Link>
         </div>
       </div>
+
+      {copiers.length > 0 && (
+        <SummaryStrip
+          portfolioValue={stats.portfolioValue}
+          masters={stats.masters}
+          followers={stats.followers}
+          active={stats.active}
+        />
+      )}
+
       {copiers.length === 0 ? (
         <div className="card">
-          <EmptyHint icon="branch" title="No copier links yet">
+          <EmptyHint icon="branch" title="No copy setups yet">
             {accounts.length < 2
-              ? "Link at least two accounts to build a pipeline."
-              : "Create your first master → follower pipeline."}
+              ? "Link at least two trading accounts, then connect a master to one or more followers."
+              : "Add your first setup — pick a master account and the followers that should copy it."}
+            {accounts.length >= 2 && (
+              <>
+                {" "}
+                <Link href="/copiers/new">Create your first setup</Link>
+              </>
+            )}
           </EmptyHint>
         </div>
       ) : (
-        <div className="card" style={{ overflow: "hidden", overflowX: "auto" }}>
-          <table className="tbl" style={{ minWidth: 980 }}>
-            <thead>
-              <tr>
-                {[
-                  "Copier Label",
-                  "Master Source",
-                  "Follower Target",
-                  "Allocation",
-                  "Active Rules",
-                  "Max Age",
-                  "Status",
-                  "",
-                ].map((h) => (
-                  <th key={h}>{h}</th>
+        <>
+          <CopierMobileList
+            groups={groups}
+            accById={accById}
+            onToggleMaster={toggleMasterGroup}
+            onToggleCopier={toggleCopier}
+            onEdit={(c) => router.push(`/copiers/${c.id}`)}
+            onDelete={(c) => setConfirmDel(c)}
+          />
+          <div className="card copier-engine-card hide-mobile copier-engine-desktop">
+          <div className="card-head">
+            <Icon name="branch" size={16} style={{ color: "var(--accent)" }} />
+            <h3>Trade copiers</h3>
+            <span className="sub">· {copiers.length} link{copiers.length !== 1 ? "s" : ""}</span>
+          </div>
+          <div style={{ overflowX: "auto" }}>
+            <table className="copier-engine-table">
+              <thead>
+                <tr>
+                  <th style={{ width: 44 }} />
+                  <th style={{ width: 90 }}>Role</th>
+                  <th colSpan={2}>Account</th>
+                  <th>Followers</th>
+                  <th style={{ width: 70 }}>On</th>
+                  <th style={{ width: 160 }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {groups.map((group) => (
+                  <MasterGroupBlock
+                    key={group.masterId}
+                    group={group}
+                    expanded={expanded.has(group.masterId)}
+                    onToggleExpand={() =>
+                      setExpanded((s) => {
+                        const n = new Set(s);
+                        if (n.has(group.masterId)) n.delete(group.masterId);
+                        else n.add(group.masterId);
+                        return n;
+                      })
+                    }
+                    onToggleMaster={() => toggleMasterGroup(group)}
+                    onToggleCopier={toggleCopier}
+                    accById={accById}
+                    onEdit={(c) => router.push(`/copiers/${c.id}`)}
+                    onDelete={(c) => setConfirmDel(c)}
+                  />
                 ))}
-              </tr>
-            </thead>
-            <tbody>
-              {copiers.map((c) => {
-                const m = accById(c.master_account_id);
-                const f = accById(c.follower_account_id);
-                const alloc =
-                  c.risk_mode === "multiplier"
-                    ? `Multiplier: ${c.multiplier.toFixed(2)}x`
-                    : `Fixed: ${c.fixed_lot_size.toFixed(2)} lots`;
-                return (
-                  <tr key={c.id}>
-                    <td style={{ fontWeight: 600 }}>{c.label}</td>
-                    <td>
-                      <div className="label-stack">
-                        <span className="lab">
-                          {m
-                            ? accountDisplayName(m.account_label, m.account_number).split(" — ")[0]
-                            : "—"}
-                        </span>
-                        <span className="id">{m?.account_number ?? ""}</span>
-                      </div>
-                    </td>
-                    <td>
-                      <div className="label-stack">
-                        <span className="lab">
-                          {f
-                            ? accountDisplayName(f.account_label, f.account_number).split(" — ")[0]
-                            : "—"}
-                        </span>
-                        <span className="id">{f?.account_number ?? ""}</span>
-                      </div>
-                    </td>
-                    <td>
-                      <span className="badge badge-plain">{alloc}</span>
-                    </td>
-                    <td>
-                      <RuleIcons
-                        rules={{
-                          sl: c.copy_sl,
-                          tp: c.copy_tp,
-                          close: c.copy_closes,
-                          modify: c.copy_modifications,
-                        }}
-                      />
-                    </td>
-                    <td className="num">{c.max_signal_age_ms} ms</td>
-                    <td>
-                      <span className={`badge badge-${c.is_enabled ? "ok" : "muted"}`}>
-                        {c.is_enabled ? "Active" : "Paused"}
-                      </span>
-                    </td>
-                    <td>
-                      <div className="row gap8" style={{ justifyContent: "flex-end" }}>
-                        <Tip text={c.is_enabled ? "Suspend route" : "Resume route"}>
-                          <Toggle on={c.is_enabled} onChange={() => toggle(c)} />
-                        </Tip>
-                        <Kebab
-                          items={[
-                            {
-                              label: "Edit Pipeline",
-                              icon: "edit",
-                              onClick: () => router.push(`/copiers/${c.id}`),
-                            },
-                            { label: "View Logs", icon: "logs", onClick: () => router.push("/logs") },
-                            { sep: true },
-                            {
-                              label: "Delete Link",
-                              icon: "trash",
-                              danger: true,
-                              onClick: () => setConfirmDel(c),
-                            },
-                          ]}
-                        />
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+              </tbody>
+            </table>
+          </div>
         </div>
+        </>
       )}
+
       {confirmDel && (
         <ConfirmModal
-          title={`Delete ${confirmDel.label}?`}
+          title={`Remove ${confirmDel.label || "this setup"}?`}
           confirmWord="DELETE"
-          confirmLabel="Delete copier"
-          body="This removes the routing pipeline. Open positions already copied are not affected."
+          confirmLabel="Remove setup"
+          body="This stops future copies on this link. Trades already copied stay on the follower account."
           onCancel={() => setConfirmDel(null)}
           onConfirm={handleDelete}
         />
@@ -220,6 +502,8 @@ export default function CopiersPage() {
 
 export function CopierFormPage({ copierId }: { copierId?: string }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const presetMaster = searchParams.get("master");
   const { accounts, accById, copiers, refreshAll, toast } = useApp();
   const getToken = useAccessToken();
   const existing = copierId ? copiers.find((c) => c.id === copierId) : undefined;
@@ -249,16 +533,18 @@ export function CopierFormPage({ copierId }: { copierId?: string }) {
         modify: existing.copy_modifications,
       });
       setMaxAge(existing.max_signal_age_ms);
-    } else if (accounts[0]) {
-      setMasterId(accounts[0].id);
-      if (accounts[1]) setFollowerId(accounts[1].id);
+    } else if (accounts.length) {
+      setMasterId(presetMaster && accById(presetMaster) ? presetMaster : accounts[0].id);
+      const follower = accounts.find((a) => a.id !== (presetMaster || accounts[0].id));
+      if (follower) setFollowerId(follower.id);
     }
-  }, [existing, accounts]);
+  }, [existing, accounts, presetMaster, accById]);
 
   const conflict = masterId && masterId === followerId;
   const valid = label && masterId && followerId && !conflict;
   const master = accById(masterId);
   const follower = accById(followerId);
+  const crossHint = crossPlatformCopyHint(master?.platform, follower?.platform);
   const toggleRule = (k: keyof typeof rules) => setRules({ ...rules, [k]: !rules[k] });
 
   const save = async () => {
@@ -281,7 +567,7 @@ export function CopierFormPage({ copierId }: { copierId?: string }) {
       };
       if (existing) await api.updateCopier(token, existing.id, body);
       else await api.createCopier(token, body);
-      toast(existing ? "Copier updated" : "Copier path deployed", "ok");
+      toast(existing ? "Copy setup saved" : "Copy setup created", "ok");
       await refreshAll();
       router.push("/copiers");
     } catch (e) {
@@ -293,32 +579,35 @@ export function CopierFormPage({ copierId }: { copierId?: string }) {
 
   const allocText =
     allocType === "multiplier"
-      ? `${mult.toFixed(2)}x lot sizing`
-      : `a fixed ${fixed.toFixed(2)} lots`;
+      ? `${mult.toFixed(2)}× the master's lot size`
+      : `${fixed.toFixed(2)} lots on every copy`;
 
   return (
     <div className="page-inner">
-      <Link href="/copiers" className="link-action" style={{ color: "var(--muted)", marginBottom: 14 }}>
+      <Link href="/copiers" className="link-action" style={{ color: "var(--text-secondary)", marginBottom: 14 }}>
         <Icon name="chevronLeft" size={14} />
-        Copier Links
+        Back to copy engine
       </Link>
-      <h1 style={{ fontSize: 21, margin: "0 0 18px", letterSpacing: "-0.02em" }}>
-        {existing ? "Edit Copier Pipeline" : "New Copier Pipeline"}
+      <h1 style={{ fontSize: 21, margin: "0 0 6px", letterSpacing: "-0.02em" }}>
+        {existing ? "Edit copy setup" : "New copy setup"}
       </h1>
-      <div style={{ display: "grid", gridTemplateColumns: "1.5fr 1fr", gap: 20, alignItems: "start" }}>
+      <p className="muted" style={{ margin: "0 0 18px", fontSize: 13.5 }}>
+        Choose which account leads and which follows, then set how large each copied trade should be.
+      </p>
+      <div className="grid-form-two-col">
         <div className="card card-pad">
           <div className="field">
-            <label>Copier label</label>
+            <label>Setup name</label>
             <input
               className="inp"
-              placeholder="e.g. Master → Follower"
+              placeholder="e.g. Main → FTMO challenge"
               value={label}
               onChange={(e) => setLabel(e.target.value)}
             />
           </div>
           <div className="row gap12">
             <div className="field" style={{ flex: 1 }}>
-              <label>Master source</label>
+              <label>Master account</label>
               <select
                 className="sel"
                 value={masterId}
@@ -326,13 +615,19 @@ export function CopierFormPage({ copierId }: { copierId?: string }) {
               >
                 {accounts.map((a) => (
                   <option key={a.id} value={a.id}>
-                    {accountDisplayName(a.account_label, a.account_number)}
+                    {accountOptionLabel(a.account_label, a.account_number, a.platform)}
                   </option>
                 ))}
               </select>
+              {master && (
+                <div className="hint" style={{ marginTop: 6 }}>
+                  <PlatformBadge platformId={master.platform} size="md" />
+                  <span style={{ marginLeft: 6 }}>Trades on this account are copied to followers.</span>
+                </div>
+              )}
             </div>
             <div className="field" style={{ flex: 1 }}>
-              <label>Follower target</label>
+              <label>Follower account</label>
               <select
                 className="sel"
                 value={followerId}
@@ -341,26 +636,37 @@ export function CopierFormPage({ copierId }: { copierId?: string }) {
               >
                 {accounts.map((a) => (
                   <option key={a.id} value={a.id}>
-                    {accountDisplayName(a.account_label, a.account_number)}
+                    {accountOptionLabel(a.account_label, a.account_number, a.platform)}
                   </option>
                 ))}
               </select>
+              {follower && (
+                <div className="hint" style={{ marginTop: 6 }}>
+                  <PlatformBadge platformId={follower.platform} size="md" />
+                  <span style={{ marginLeft: 6 }}>Receives copied trades from the master.</span>
+                </div>
+              )}
             </div>
           </div>
+          {crossHint && (
+            <div className="alert alert-info" style={{ marginBottom: 14 }}>
+              {crossHint}
+            </div>
+          )}
           {conflict && (
             <div className="alert alert-crit" style={{ marginBottom: 16 }}>
               <span className="a-ico">
                 <Icon name="alert" size={15} />
               </span>
               <div>
-                <strong>Validation error. </strong>
-                Master and follower must be distinct accounts.
+                <strong>Pick two different accounts. </strong>
+                Master and follower cannot be the same account.
               </div>
             </div>
           )}
           <div className="divider" />
           <label style={{ display: "block", fontSize: 12.5, fontWeight: 600, marginBottom: 8 }}>
-            Allocation model
+            How much to copy
           </label>
           <div className="radio-row" style={{ marginBottom: 14 }}>
             <div
@@ -369,9 +675,9 @@ export function CopierFormPage({ copierId }: { copierId?: string }) {
             >
               <div className="rc-top">
                 <span className="rc-mark" />
-                Risk ratio multiplier
+                Balance multiplier
               </div>
-              <div className="rc-desc">Scale follower lots by a factor of the master.</div>
+              <div className="rc-desc">Scale follower lots relative to the master trade.</div>
             </div>
             <div
               className={`radio-card${allocType === "fixed_lot" ? " sel" : ""}`}
@@ -379,9 +685,9 @@ export function CopierFormPage({ copierId }: { copierId?: string }) {
             >
               <div className="rc-top">
                 <span className="rc-mark" />
-                Fixed lot allocation
+                Fixed lot size
               </div>
-              <div className="rc-desc">Every copied trade uses one fixed lot size.</div>
+              <div className="rc-desc">Every copied trade uses the same lot size.</div>
             </div>
           </div>
           {allocType === "multiplier" ? (
@@ -412,7 +718,7 @@ export function CopierFormPage({ copierId }: { copierId?: string }) {
             </div>
           ) : (
             <div className="field" style={{ maxWidth: 220 }}>
-              <label>Fixed lot size</label>
+              <label>Lot size</label>
               <div className="inp-wrap">
                 <input
                   className="inp mono"
@@ -427,14 +733,14 @@ export function CopierFormPage({ copierId }: { copierId?: string }) {
           )}
           <div className="divider" />
           <label style={{ display: "block", fontSize: 12.5, fontWeight: 600, marginBottom: 10 }}>
-            Event sync boundaries
+            What to copy
           </label>
           {(
             [
-              ["sl", "Copy stop-loss protection"],
-              ["tp", "Copy take-profit boundaries"],
-              ["close", "Process manual order liquidations"],
-              ["modify", "Replicate order amendments"],
+              ["sl", "Stop loss"],
+              ["tp", "Take profit"],
+              ["close", "When master closes"],
+              ["modify", "Changes to stops & targets"],
             ] as const
           ).map(([k, lbl]) => (
             <div
@@ -447,7 +753,7 @@ export function CopierFormPage({ copierId }: { copierId?: string }) {
             </div>
           ))}
           <div className="field" style={{ marginTop: 18, marginBottom: 0, maxWidth: 260 }}>
-            <label>Max signal age limit</label>
+            <label>Max delay before skip</label>
             <div className="inp-wrap">
               <input
                 className="inp mono"
@@ -458,18 +764,18 @@ export function CopierFormPage({ copierId }: { copierId?: string }) {
               <span className="inp-suffix">ms</span>
             </div>
             <div className="hint">
-              Signals older than this skip copying to safeguard execution from stale prices.
+              If a signal is older than this, it won&apos;t copy — helps avoid stale prices.
             </div>
           </div>
         </div>
-        <div className="card" style={{ background: "var(--panel)", position: "sticky", top: 0 }}>
+        <div className="card card-preview" style={{ background: "var(--panel)" }}>
           <div className="card-head" style={{ background: "transparent" }}>
-            <Icon name="gauge" size={16} style={{ color: "var(--accent)" }} />
-            <h3>Pipeline Simulation</h3>
+            <Icon name="branch" size={16} style={{ color: "var(--accent)" }} />
+            <h3>Preview</h3>
           </div>
           <div style={{ padding: 18 }}>
             <div className="node master">
-              <div className="n-role">Master Source</div>
+              <div className="n-role">Master</div>
               <div className="n-name">
                 {master
                   ? accountDisplayName(master.account_label, master.account_number)
@@ -487,10 +793,10 @@ export function CopierFormPage({ copierId }: { copierId?: string }) {
               <Icon name="chevronDown" size={18} />
             </div>
             <div className="node follower">
-              <div className="n-role">Follower Target</div>
+              <div className="n-role">Follower</div>
               <div className="n-name">
                 {conflict
-                  ? "— invalid —"
+                  ? "— pick another account —"
                   : follower
                     ? accountDisplayName(follower.account_label, follower.account_number)
                     : "Select follower"}
@@ -499,9 +805,8 @@ export function CopierFormPage({ copierId }: { copierId?: string }) {
             </div>
             <div className="divider" />
             <div style={{ fontSize: 12.5, lineHeight: 1.6, color: "var(--dark)" }}>
-              Any market event on the master copies onto the follower at{" "}
-              <strong>{allocText}</strong>, within a{" "}
-              <span className="mono">{maxAge}ms</span> window.
+              When the master opens or closes a trade, the follower copies it at{" "}
+              <strong>{allocText}</strong>.
             </div>
           </div>
         </div>
@@ -512,12 +817,12 @@ export function CopierFormPage({ copierId }: { copierId?: string }) {
         </Link>
         <button
           type="button"
-          className="btn btn-dark"
+          className="btn btn-accent"
           disabled={!valid || saving}
           onClick={save}
         >
           <Icon name="branch" size={14} />
-          {saving ? "Saving…" : existing ? "Update Copier" : "Deploy Copier Path"}
+          {saving ? "Saving…" : existing ? "Save setup" : "Create setup"}
         </button>
       </div>
     </div>

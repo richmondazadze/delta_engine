@@ -95,8 +95,8 @@ function SetupVisual() {
 			<div className="relative mt-8 space-y-2 text-center">
 				<FeatureTitle>2-minute account setup</FeatureTitle>
 				<FeatureDescription>
-					Link your first trading account and deploy a copy pipeline in minutes — no VPS,
-					no Expert Advisors, no terminal babysitting.
+					Link your first account and deploy a copy path in minutes — no VPS, no Expert
+					Advisors, no terminal babysitting. Every feature, simplified to copy.
 				</FeatureDescription>
 			</div>
 		</>
@@ -112,10 +112,10 @@ function UserBasedSecurity() {
 			</div>
 
 			<div className="relative mt-8 space-y-2 text-center">
-				<FeatureTitle>Risk-first by default</FeatureTitle>
+				<FeatureTitle>Risk management, built in</FeatureTitle>
 				<FeatureDescription>
-					Daily loss limits, lockouts, symbol filters, and equity protection help protect
-					prop-firm and multi-account workflows.
+					Daily loss limits, lockouts, symbol filters, and equity protection — control
+					your risk while you mirror the strategies that matter.
 				</FeatureDescription>
 			</div>
 		</>
@@ -137,8 +137,8 @@ function ReportsVisual() {
 			<div className="relative z-10 mt-8 space-y-2 text-center">
 				<FeatureTitle>Forensic execution logs</FeatureTitle>
 				<FeatureDescription>
-					Every open, close, modify, skip, and failure is recorded with latency, broker
-					codes, and full audit context.
+					Every open, close, modify, skip, and failure recorded with latency and broker
+					context — the audit trail serious operators expect.
 				</FeatureDescription>
 			</div>
 		</>
@@ -154,11 +154,11 @@ function DashboardVisual() {
 				</div>
 				<div className="space-y-3">
 					<FeatureTitle className="text-xl md:text-2xl">
-						Command control for every account
+						Real-time monitoring for every account
 					</FeatureTitle>
 					<FeatureDescription className="text-base leading-relaxed">
-						Monitor connection health, active copy paths, latency, and recent execution
-						events from one cloud-native dashboard.
+						Connection health, active copy paths, latency, and recent execution events —
+						one cloud-native command center for your full stack.
 					</FeatureDescription>
 				</div>
 			</div>
@@ -183,8 +183,8 @@ function PresenceVisual() {
 						Portfolio visibility, anywhere
 					</FeatureTitle>
 					<FeatureDescription className="text-base leading-relaxed">
-						Track performance across linked accounts in real time — whether you operate
-						from one desk or across multiple regions.
+						Track win rate, drawdown, and consistency across linked accounts in real time
+						— whether you operate from one desk or across multiple regions.
 					</FeatureDescription>
 				</div>
 			</div>

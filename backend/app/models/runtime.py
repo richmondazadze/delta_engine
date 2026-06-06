@@ -11,10 +11,12 @@ class RuntimeAccount(BaseModel):
     id: str
     label: str
     role: str
-    login: int
+    login: str
     password: str
     server: str
     terminal_path: Optional[str] = None
+    api_base_url: Optional[str] = None
+    platform: str = "mt5"
     enabled: bool = True
 
 
@@ -45,6 +47,27 @@ class RuntimeConfigResponse(BaseModel):
     accounts: list[RuntimeAccount]
     copiers: list[RuntimeCopier]
     symbol_mappings: list[RuntimeSymbolMapping]
+    risk_profiles: list["RuntimeRiskProfile"] = Field(default_factory=list)
+
+
+class RuntimeRiskProfile(BaseModel):
+    id: str
+    account_id: str
+    max_daily_loss: Optional[float] = None
+    max_total_loss: Optional[float] = None
+    min_equity: Optional[float] = None
+    max_lot_per_trade: Optional[float] = None
+    max_open_positions: Optional[int] = None
+    max_trades_per_day: Optional[int] = None
+    allowed_symbols: Optional[list[str]] = None
+    blocked_symbols: Optional[list[str]] = None
+    is_locked: bool = False
+    locked_reason: Optional[str] = None
+    daily_loss_accumulated: float = 0.0
+    daily_trades_count: int = 0
+
+
+RuntimeConfigResponse.model_rebuild()
 
 
 class SeedAccountInput(BaseModel):

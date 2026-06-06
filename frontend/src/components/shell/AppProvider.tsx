@@ -6,29 +6,46 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
 import { createClient } from "@/lib/supabase/client";
-import type { Account, Copier, LogRow, RiskProfile, Toast, ToastKind } from "@/lib/types";
+import type {
+  Account,
+  Copier,
+  DashboardSummary,
+  LogRow,
+  RiskProfile,
+  Toast,
+  ToastKind,
+} from "@/lib/types";
 import { executionEventToLogRow } from "@/lib/format";
 import * as api from "@/lib/data";
+
+const POLL_MS = 20_000;
 
 interface AppContextValue {
   loading: boolean;
   email: string;
   accountLimit: number;
+  followerLimit: number;
+  subscriptionPlan: string;
+  workerHealthy: boolean;
   accounts: Account[];
   copiers: Copier[];
   riskProfiles: RiskProfile[];
   logs: LogRow[];
   logsTotal: number;
+  dashboard: DashboardSummary | null;
+  lastUpdatedAt: Date | null;
   paused: boolean;
   setPaused: (v: boolean) => void;
   toasts: Toast[];
   toast: (msg: string, kind?: ToastKind) => void;
   refreshAll: () => Promise<void>;
   refreshLogs: () => Promise<void>;
+  refreshDashboard: () => Promise<void>;
   accById: (id: string) => Account | undefined;
   cpById: (id: string) => Copier | undefined;
   riskByAccountId: (accountId: string) => RiskProfile | undefined;
@@ -49,13 +66,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(null);
   const [email, setEmail] = useState("");
   const [accountLimit, setAccountLimit] = useState(2);
+  const [followerLimit, setFollowerLimit] = useState(1);
+  const [subscriptionPlan, setSubscriptionPlan] = useState("free");
+  const [workerHealthy, setWorkerHealthy] = useState(false);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [copiers, setCopiers] = useState<Copier[]>([]);
   const [riskProfiles, setRiskProfiles] = useState<RiskProfile[]>([]);
   const [logs, setLogs] = useState<LogRow[]>([]);
   const [logsTotal, setLogsTotal] = useState(0);
+  const [dashboard, setDashboard] = useState<DashboardSummary | null>(null);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
   const [paused, setPaused] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const seenActivityIds = useRef<Set<string>>(new Set());
+  const activityBootstrapped = useRef(false);
 
   const toast = useCallback((msg: string, kind: ToastKind = "ok") => {
     const id = Math.random().toString(36).slice(2);
@@ -63,23 +87,67 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 3200);
   }, []);
 
+  const processNewActivity = useCallback(
+    (summary: DashboardSummary) => {
+      const copyEvents = summary.recent_activity.filter(
+        (a) =>
+          a.event_type === "position_opened" &&
+          (a.status === "success" || a.status === "failed" || a.status === "rejected"),
+      );
+      if (!activityBootstrapped.current) {
+        copyEvents.forEach((a) => seenActivityIds.current.add(a.id));
+        activityBootstrapped.current = true;
+        return;
+      }
+      for (const a of copyEvents) {
+        if (seenActivityIds.current.has(a.id)) continue;
+        seenActivityIds.current.add(a.id);
+        const kind: ToastKind =
+          a.status === "success" ? "ok" : "err";
+        toast(a.message, kind);
+      }
+    },
+    [toast],
+  );
+
   const loadData = useCallback(
     async (accessToken: string) => {
-      const [accs, cps, risks, events] = await Promise.all([
+      const [accs, cps, risks, events, profile, dash] = await Promise.all([
         api.fetchAccounts(accessToken),
         api.fetchCopiers(accessToken),
         api.fetchRiskProfiles(accessToken),
         api.fetchExecutionEvents(accessToken, { limit: 200 }),
+        api.fetchUserProfile(accessToken),
+        api.fetchDashboardSummary(accessToken),
       ]);
       setAccounts(accs);
       setCopiers(cps);
       setRiskProfiles(risks);
       setLogs(events.events.map(executionEventToLogRow));
       setLogsTotal(events.total);
-      setAccountLimit(2);
+      setAccountLimit(profile.account_limit);
+      setFollowerLimit(profile.follower_limit);
+      setSubscriptionPlan(profile.subscription_plan);
+      setWorkerHealthy(profile.worker_healthy);
+      setDashboard(dash);
+      setLastUpdatedAt(new Date());
+      processNewActivity(dash);
     },
-    [],
+    [processNewActivity],
   );
+
+  const refreshDashboard = useCallback(async () => {
+    if (!token) return;
+    try {
+      const dash = await api.fetchDashboardSummary(token);
+      setDashboard(dash);
+      setWorkerHealthy(dash.worker_healthy);
+      setLastUpdatedAt(new Date());
+      processNewActivity(dash);
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Failed to refresh dashboard", "err");
+    }
+  }, [token, processNewActivity, toast]);
 
   const refreshAll = useCallback(async () => {
     if (!token) return;
@@ -97,7 +165,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setLogs(events.events.map(executionEventToLogRow));
       setLogsTotal(events.total);
     } catch (e) {
-      toast(e instanceof Error ? e.message : "Failed to refresh logs", "err");
+      toast(e instanceof Error ? e.message : "Failed to refresh activity", "err");
     }
   }, [token, toast]);
 
@@ -126,6 +194,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (session?.access_token) {
         setToken(session.access_token);
         setEmail(session.user.email ?? "");
+        activityBootstrapped.current = false;
+        seenActivityIds.current.clear();
         try {
           await loadData(session.access_token);
         } catch {
@@ -138,6 +208,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setCopiers([]);
         setRiskProfiles([]);
         setLogs([]);
+        setDashboard(null);
+        setLastUpdatedAt(null);
+        activityBootstrapped.current = false;
+        seenActivityIds.current.clear();
       }
     });
 
@@ -150,10 +224,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (paused || !token) return;
     const id = setInterval(() => {
+      refreshDashboard();
       refreshLogs();
-    }, 8000);
+    }, POLL_MS);
     return () => clearInterval(id);
-  }, [paused, token, refreshLogs]);
+  }, [paused, token, refreshDashboard, refreshLogs]);
 
   const signOut = useCallback(async () => {
     await supabase.auth.signOut();
@@ -164,17 +239,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
       loading,
       email,
       accountLimit,
+      followerLimit,
+      subscriptionPlan,
+      workerHealthy,
       accounts,
       copiers,
       riskProfiles,
       logs,
       logsTotal,
+      dashboard,
+      lastUpdatedAt,
       paused,
       setPaused,
       toasts,
       toast,
       refreshAll,
       refreshLogs,
+      refreshDashboard,
       accById: (id) => accounts.find((a) => a.id === id),
       cpById: (id) => copiers.find((c) => c.id === id),
       riskByAccountId: (accountId) =>
@@ -185,16 +266,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
       loading,
       email,
       accountLimit,
+      followerLimit,
+      subscriptionPlan,
+      workerHealthy,
       accounts,
       copiers,
       riskProfiles,
       logs,
       logsTotal,
+      dashboard,
+      lastUpdatedAt,
       paused,
       toasts,
       toast,
       refreshAll,
       refreshLogs,
+      refreshDashboard,
       signOut,
     ],
   );
@@ -205,6 +292,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
 export function useAccessToken() {
   const supabase = createClient();
   return useCallback(async () => {
+    const {
+      data: { user },
+      error,
+    } = await supabase.auth.getUser();
+    if (error || !user) return null;
     const {
       data: { session },
     } = await supabase.auth.getSession();

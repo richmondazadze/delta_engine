@@ -9,7 +9,13 @@ import { TestimonialsSection } from "@/components/testimonials-section";
 import { CallToAction } from "@/components/cta";
 import { MarketingSection } from "@/components/marketing/MarketingSection";
 import { MarketingReveal } from "@/components/marketing/MarketingReveal";
-import { MARKET_TOOLS, METRICS, PILLARS } from "@/lib/marketing-content";
+import {
+  HOME_MISSION,
+  HOME_SECTIONS,
+  MARKET_TOOLS,
+  METRICS,
+  PILLARS,
+} from "@/lib/marketing-content";
 
 export function LandingPage() {
   return (
@@ -21,10 +27,21 @@ export function LandingPage() {
       </MarketingReveal>
 
       <MarketingSection
+        id="mission"
+        kicker={HOME_MISSION.kicker}
+        title={HOME_MISSION.title}
+        description={HOME_MISSION.description}
+      >
+        <p className="mx-auto max-w-3xl text-center text-xl font-medium tracking-tight text-foreground md:text-2xl">
+          {HOME_MISSION.tagline}
+        </p>
+      </MarketingSection>
+
+      <MarketingSection
         id="supported-platforms"
-        kicker="Supported platforms"
-        title="Every major trading environment, one connected stack"
-        description="CopyMorphic integrates with the platforms prop firms, futures desks, and multi-account traders rely on — so you can connect once and operate everywhere."
+        kicker={HOME_SECTIONS.platforms.kicker}
+        title={HOME_SECTIONS.platforms.title}
+        description={HOME_SECTIONS.platforms.description}
       >
         <LogosSection />
         <div className="mt-16 md:mt-20">
@@ -34,18 +51,18 @@ export function LandingPage() {
 
       <MarketingSection
         id="features"
-        kicker="Platform capabilities"
-        title="Every feature designed for control, clarity, and measurable results"
-        description="From cloud-native copying to forensic execution logs and portfolio analytics, CopyMorphic gives serious traders infrastructure they can trust."
+        kicker={HOME_SECTIONS.features.kicker}
+        title={HOME_SECTIONS.features.title}
+        description={HOME_SECTIONS.features.description}
       >
         <FeatureSection />
       </MarketingSection>
 
       <MarketingSection
         id="pillars"
-        kicker="Product pillars"
-        title="Copier, Analyzer, and Compare — built to work together"
-        description="Three connected modules that reduce complexity in modern trading and support smarter decisions across your entire operation."
+        kicker={HOME_SECTIONS.pillars.kicker}
+        title={HOME_SECTIONS.pillars.title}
+        description={HOME_SECTIONS.pillars.description}
       >
         <div className="grid gap-6 md:grid-cols-3 md:gap-8">
           {PILLARS.map((pillar) => (
@@ -69,8 +86,9 @@ export function LandingPage() {
 
       <MarketingSection
         id="metrics"
-        kicker="Trusted by traders"
-        title="Performance you can measure, not just claim"
+        kicker={HOME_SECTIONS.metrics.kicker}
+        title={HOME_SECTIONS.metrics.title}
+        description={HOME_SECTIONS.metrics.description}
         align="center"
       >
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4 lg:gap-8">
@@ -86,18 +104,18 @@ export function LandingPage() {
 
       <MarketingSection
         id="testimonials"
-        kicker="Social proof"
-        title="Built for traders who cannot afford silent failures"
-        description="Prop traders and multi-account operators choose CopyMorphic for execution reliability, transparent logs, and portfolio clarity."
+        kicker={HOME_SECTIONS.testimonials.kicker}
+        title={HOME_SECTIONS.testimonials.title}
+        description={HOME_SECTIONS.testimonials.description}
       >
         <TestimonialsSection />
       </MarketingSection>
 
       <MarketingSection
         id="pricing"
-        kicker="Pricing"
-        title="Transparent pricing built to scale with your trading journey"
-        description="Start with flexible MT5 workflows, then expand into premium latency tiers, analyzer add-ons, and dedicated environments as you grow."
+        kicker={HOME_SECTIONS.pricing.kicker}
+        title={HOME_SECTIONS.pricing.title}
+        description={HOME_SECTIONS.pricing.description}
       >
         <PricingSection />
       </MarketingSection>
@@ -108,9 +126,9 @@ export function LandingPage() {
 
       <MarketingSection
         id="market-tools"
-        kicker="Market tools"
-        title="Stay informed with real-time market context"
-        description="Sentiment, macro events, and curated news — integrated into the same ecosystem as your copier and analytics."
+        kicker={HOME_SECTIONS.marketTools.kicker}
+        title={HOME_SECTIONS.marketTools.title}
+        description={HOME_SECTIONS.marketTools.description}
       >
         <div className="grid gap-6 md:grid-cols-3 md:gap-8">
           {MARKET_TOOLS.map((tool) => (

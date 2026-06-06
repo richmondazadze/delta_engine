@@ -4,9 +4,12 @@ Symbol mapping between master and follower brokers.
 
 from __future__ import annotations
 
-from typing import List
+from typing import List, Optional, TYPE_CHECKING
 
 from engine.config_loader import SymbolMapping
+
+if TYPE_CHECKING:
+    from engine.mt5_connector import MT5Connector
 
 
 class SymbolMapper:
@@ -14,4 +17,40 @@ class SymbolMapper:
         self._map = {m.master_symbol: m.follower_symbol for m in mappings}
 
     def map_symbol(self, master_symbol: str) -> str:
-        return self._map.get(master_symbol, master_symbol)
+        """Configured alias only — does not guess broker suffixes."""
+        if master_symbol in self._map:
+            return self._map[master_symbol]
+        if master_symbol.endswith("m") and len(master_symbol) > 4:
+            base = master_symbol[:-1]
+            if base in self._map:
+                return self._map[base]
+        return master_symbol
+
+    def resolve_for_follower(
+        self,
+        master_symbol: str,
+        connector: "MT5Connector",
+    ) -> Optional[str]:
+        """
+        Pick a symbol that exists on the follower terminal.
+        Tries explicit mapping, master name, then common suffix variants.
+        """
+        mapped = self.map_symbol(master_symbol)
+        candidates: list[str] = []
+        for sym in (mapped, master_symbol):
+            if sym and sym not in candidates:
+                candidates.append(sym)
+        if master_symbol.endswith("m") and len(master_symbol) > 4:
+            base = master_symbol[:-1]
+            for sym in (base, f"{base}m"):
+                if sym not in candidates:
+                    candidates.append(sym)
+        elif not master_symbol.endswith("m"):
+            suffixed = f"{master_symbol}m"
+            if suffixed not in candidates:
+                candidates.append(suffixed)
+
+        for sym in candidates:
+            if connector.get_symbol_info(sym) is not None:
+                return sym
+        return None

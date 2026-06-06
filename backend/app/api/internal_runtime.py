@@ -20,6 +20,7 @@ from app.models.runtime import (
     RuntimeAccount,
     RuntimeConfigResponse,
     RuntimeCopier,
+    RuntimeRiskProfile,
     RuntimeSymbolMapping,
     SeedConfigRequest,
     SeedConfigResponse,
@@ -53,11 +54,12 @@ async def get_runtime_config(
         sb.table("copier_relations")
         .select("*")
         .eq("user_id", user_id)
-        .eq("is_enabled", True)
         .execute()
     ).data or []
 
-    if not copier_rows:
+    enabled_copier_rows = [r for r in copier_rows if r.get("is_enabled")]
+
+    if not enabled_copier_rows:
         raise HTTPException(
             status_code=404,
             detail="No enabled copier relations for this user",
@@ -89,10 +91,12 @@ async def get_runtime_config(
                 id=row["id"],
                 label=row.get("account_label") or row["account_number"],
                 role=roles.get(row["id"], "follower"),
-                login=int(row["account_number"]),
+                login=str(row["account_number"]),
                 password=decrypt_password(row["encrypted_password"]),
                 server=row["broker_server"],
                 terminal_path=row.get("terminal_path"),
+                api_base_url=row.get("api_base_url"),
+                platform=str(row.get("platform") or "mt5"),
                 enabled=row.get("is_enabled", True),
             )
         )
@@ -133,11 +137,81 @@ async def get_runtime_config(
         for row in mapping_rows
     ]
 
+    risk_rows = (
+        sb.table("risk_profiles")
+        .select("*")
+        .eq("user_id", user_id)
+        .execute()
+    ).data or []
+
+    risk_profiles = [
+        RuntimeRiskProfile(
+            id=row["id"],
+            account_id=row["account_id"],
+            max_daily_loss=float(row["max_daily_loss"]) if row.get("max_daily_loss") is not None else None,
+            max_total_loss=float(row["max_total_loss"]) if row.get("max_total_loss") is not None else None,
+            min_equity=float(row["min_equity"]) if row.get("min_equity") is not None else None,
+            max_lot_per_trade=float(row["max_lot_per_trade"]) if row.get("max_lot_per_trade") is not None else None,
+            max_open_positions=row.get("max_open_positions"),
+            max_trades_per_day=row.get("max_trades_per_day"),
+            allowed_symbols=row.get("allowed_symbols"),
+            blocked_symbols=row.get("blocked_symbols"),
+            is_locked=row.get("is_locked", False),
+            locked_reason=row.get("locked_reason"),
+            daily_loss_accumulated=float(row.get("daily_loss_accumulated") or 0),
+            daily_trades_count=int(row.get("daily_trades_count") or 0),
+        )
+        for row in risk_rows
+    ]
+
     return RuntimeConfigResponse(
         user_id=user_id,
         accounts=accounts,
         copiers=copiers,
         symbol_mappings=symbol_mappings,
+        risk_profiles=risk_profiles,
+    )
+
+
+@router.get("/trading-accounts/{account_id}", response_model=RuntimeAccount)
+async def get_trading_account_for_worker(
+    account_id: str,
+    user_id: str = Header(..., alias="X-User-Id"),
+    _: None = Depends(verify_worker_key),
+):
+    """Fetch a single linked account (decrypted) for worker-side connection tests."""
+    sb = get_supabase_admin()
+    row = (
+        sb.table("trading_accounts")
+        .select("*")
+        .eq("id", account_id)
+        .eq("user_id", user_id)
+        .single()
+        .execute()
+    ).data
+
+    if not row:
+        raise HTTPException(status_code=404, detail="Account not found")
+
+    from app.services.orchestrator import _prepare_mt5_row
+
+    row = _prepare_mt5_row(row)
+    if row.get("terminal_path"):
+        sb.table("trading_accounts").update(
+            {"terminal_path": row["terminal_path"], "account_metadata": row.get("account_metadata")}
+        ).eq("id", account_id).execute()
+
+    return RuntimeAccount(
+        id=row["id"],
+        label=row.get("account_label") or row["account_number"],
+        role="master",
+        login=str(row["account_number"]),
+        password=decrypt_password(row["encrypted_password"]),
+        server=row["broker_server"],
+        terminal_path=row.get("terminal_path"),
+        api_base_url=row.get("api_base_url"),
+        platform=str(row.get("platform") or "mt5"),
+        enabled=row.get("is_enabled", True),
     )
 
 

@@ -47,9 +47,17 @@ class Settings(BaseSettings):
     # ---- Worker internal auth ----
     worker_api_key: str = Field(..., alias="WORKER_API_KEY")
 
-    # ---- Stripe ----
+    # ---- Stripe (TradersConnect-style per-account pricing — see docs/BILLING.md) ----
     stripe_secret_key: str = Field(default="", alias="STRIPE_SECRET_KEY")
     stripe_webhook_secret: str = Field(default="", alias="STRIPE_WEBHOOK_SECRET")
+    stripe_price_standard: str = Field(default="", alias="STRIPE_PRICE_STANDARD")
+    stripe_price_premium: str = Field(default="", alias="STRIPE_PRICE_PREMIUM")
+    stripe_price_analyzer: str = Field(default="", alias="STRIPE_PRICE_ANALYZER")
+    stripe_price_dedicated: str = Field(default="", alias="STRIPE_PRICE_DEDICATED")
+    # Legacy env names (fallback)
+    stripe_price_starter: str = Field(default="", alias="STRIPE_PRICE_STARTER")
+    stripe_price_pro: str = Field(default="", alias="STRIPE_PRICE_PRO")
+    stripe_price_scale: str = Field(default="", alias="STRIPE_PRICE_SCALE")
 
     @property
     def cors_origins(self) -> List[str]:

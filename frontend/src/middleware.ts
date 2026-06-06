@@ -3,6 +3,17 @@ import { NextResponse, type NextRequest } from "next/server";
 
 type CookieToSet = { name: string; value: string; options: CookieOptions };
 
+const PROTECTED_PREFIXES = [
+  "/dashboard",
+  "/accounts",
+  "/copiers",
+  "/logs",
+  "/risk",
+  "/settings",
+  "/analytics",
+  "/admin",
+];
+
 export async function middleware(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
 
@@ -25,19 +36,16 @@ export async function middleware(request: NextRequest) {
     },
   );
 
+  // Refresh session if expired — required for Server Components and API calls
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
   const path = request.nextUrl.pathname;
-  const isAuthPage = path === "/login" || path === "/register";
-  const isProtected =
-    path.startsWith("/dashboard") ||
-    path.startsWith("/accounts") ||
-    path.startsWith("/copiers") ||
-    path.startsWith("/logs") ||
-    path.startsWith("/risk") ||
-    path.startsWith("/settings");
+  const isAuthPage =
+    path === "/login" || path === "/register" || path === "/forgot-password";
+  const isAuthCallback = path.startsWith("/auth/callback");
+  const isProtected = PROTECTED_PREFIXES.some((p) => path.startsWith(p));
 
   if (!user && isProtected) {
     const url = request.nextUrl.clone();
@@ -50,6 +58,10 @@ export async function middleware(request: NextRequest) {
     const url = request.nextUrl.clone();
     url.pathname = "/dashboard";
     return NextResponse.redirect(url);
+  }
+
+  if (isAuthCallback) {
+    return supabaseResponse;
   }
 
   return supabaseResponse;

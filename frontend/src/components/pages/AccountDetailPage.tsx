@@ -69,6 +69,8 @@ export default function AccountDetailPage({ id }: { id: string }) {
       if (!token) throw new Error("Not authenticated");
       await api.deleteAccount(token, id);
       toast("Account deleted", "ok");
+      setConfirmDel(false);
+      await refreshAll();
       router.push("/accounts");
     } catch (e) {
       toast(e instanceof Error ? e.message : "Delete failed", "err");
@@ -77,7 +79,7 @@ export default function AccountDetailPage({ id }: { id: string }) {
 
   return (
     <div className="page-inner">
-      <Link href="/accounts" className="link-action" style={{ color: "var(--muted)", marginBottom: 14 }}>
+      <Link href="/accounts" className="link-action" style={{ color: "var(--text-secondary)", marginBottom: 14 }}>
         <Icon name="chevronLeft" size={14} />
         Trading Accounts
       </Link>
@@ -108,12 +110,8 @@ export default function AccountDetailPage({ id }: { id: string }) {
       {tab === "overview" && (
         <div>
           <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(180px,1fr))",
-              gap: 14,
-              marginBottom: 18,
-            }}
+            className="grid-detail-stats"
+            style={{ marginBottom: 18 }}
           >
             {[
               ["Balance", fmtMoney(a.balance), true],
@@ -276,7 +274,7 @@ export default function AccountDetailPage({ id }: { id: string }) {
           <h3>Delete Trading Account</h3>
         </div>
         <div className="row spread" style={{ padding: "14px 18px" }}>
-          <div style={{ fontSize: 12.5, color: "var(--muted)", maxWidth: 460 }}>
+          <div style={{ fontSize: 12.5, color: "var(--text-secondary)", maxWidth: 460 }}>
             Permanently remove this terminal from the engine. Associated copier links will be
             suspended.
           </div>
