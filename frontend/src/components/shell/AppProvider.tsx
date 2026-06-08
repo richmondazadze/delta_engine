@@ -24,7 +24,7 @@ import type {
 import { executionEventToLogRow } from "@/lib/format";
 import * as api from "@/lib/data";
 
-const POLL_MS = 20_000;
+const POLL_MS = 10_000;
 
 interface AppContextValue {
   loading: boolean;

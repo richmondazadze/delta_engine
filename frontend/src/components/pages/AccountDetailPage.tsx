@@ -117,7 +117,6 @@ export default function AccountDetailPage({ id }: { id: string }) {
               ["Balance", fmtMoney(a.balance), true],
               ["Equity", fmtMoney(a.equity), true],
               ["Leverage", a.leverage ? `1:${a.leverage}` : "—", true],
-              ["Execution Model", a.account_mode, false],
               ["Currency", a.currency ?? "—", true],
             ].map(([k, v, mono]) => (
               <div key={k as string} className="card card-pad">

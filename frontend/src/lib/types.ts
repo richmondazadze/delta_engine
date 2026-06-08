@@ -234,6 +234,9 @@ export interface DashboardSummary {
     failed: number;
     net_equity_change: number | null;
     total_equity: number | null;
+    equity_open: number | null;
+    copy_success_rate: number | null;
+    avg_latency_ms: number | null;
   };
   accounts: DashboardAccount[];
   pipelines: DashboardPipeline[];

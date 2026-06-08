@@ -59,6 +59,8 @@ export function humanEventType(eventType: string | null | undefined): string {
   const map: Record<string, string> = {
     open: "Trade opened",
     close: "Trade closed",
+    position_opened: "Copy opened",
+    position_closed: "Copy closed",
     modify: "Stop / target changed",
     partial_close: "Partial close",
     balance: "Balance update",

@@ -160,17 +160,6 @@ function AccountBlade({
               </div>
             </div>
           )}
-          <div>
-            <div
-              className="faint"
-              style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: "0.05em" }}
-            >
-              Mode
-            </div>
-            <div className="mono" style={{ fontWeight: 600 }}>
-              {a.account_mode}
-            </div>
-          </div>
         </div>
         <div className="grid-account-balances">
           <div style={{ padding: "10px 13px", borderRight: "1px solid var(--border)" }}>

@@ -57,13 +57,27 @@ def build_dashboard_summary(sb, user_id: str) -> dict[str, Any]:
     today_copies = sum(
         1 for e in events if e.get("event_type") == "position_opened" and e.get("status") == "success"
     )
-    today_closed = sum(1 for e in events if e.get("status") == "closed")
+    today_closed = sum(
+        1
+        for e in events
+        if e.get("event_type") == "position_closed" and e.get("status") == "closed"
+    )
     today_failed = sum(
         1
         for e in events
         if e.get("status") in ("failed", "rejected")
         and e.get("event_type") in ("position_opened", "position_closed")
     )
+
+    copy_attempts = today_copies + today_failed
+    copy_success_rate: Optional[float] = None
+    if copy_attempts > 0:
+        copy_success_rate = round((today_copies / copy_attempts) * 100, 2)
+
+    latencies = [int(e["latency_ms"]) for e in events if e.get("latency_ms") is not None]
+    avg_latency_ms: Optional[int] = None
+    if latencies:
+        avg_latency_ms = round(sum(latencies) / len(latencies))
 
     total_equity = 0.0
     total_equity_open = 0.0
@@ -187,6 +201,9 @@ def build_dashboard_summary(sb, user_id: str) -> dict[str, Any]:
             if has_equity
             else None,
             "total_equity": round(total_equity, 2) if has_equity else None,
+            "equity_open": round(total_equity_open, 2) if has_equity else None,
+            "copy_success_rate": copy_success_rate,
+            "avg_latency_ms": avg_latency_ms,
         },
         "accounts": account_rows,
         "pipelines": pipeline_rows,

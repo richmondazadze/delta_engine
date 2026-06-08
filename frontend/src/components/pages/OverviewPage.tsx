@@ -10,9 +10,11 @@ import {
   connectionBadge,
   fmtClock,
   fmtMoney,
+  fmtPctChange,
+  fmtSpeedMs,
 } from "@/lib/format";
 import { PlatformBadge } from "@/components/PlatformIcon";
-import type { DashboardPipeline, PipelineHealth } from "@/lib/types";
+import type { DashboardPipeline, LogRow, PipelineHealth } from "@/lib/types";
 
 function secondsAgo(d: Date | null) {
   if (!d) return "—";
@@ -21,9 +23,12 @@ function secondsAgo(d: Date | null) {
   return `${Math.floor(s / 60)}m ago`;
 }
 
-function pctChange(current: number, previous: number) {
-  if (previous === 0) return current === 0 ? 0 : 100;
-  return ((current - previous) / Math.abs(previous)) * 100;
+function isOpenCopyLog(l: LogRow) {
+  return l.raw?.event_type === "position_opened" && l.raw?.status === "success";
+}
+
+function isClosedCopyLog(l: LogRow) {
+  return l.raw?.event_type === "position_closed" && l.raw?.status === "closed";
 }
 
 function DashStat({
@@ -46,26 +51,6 @@ function DashStat({
   );
 }
 
-function CompareSub({
-  pct,
-  compareLabel,
-}: {
-  pct: number;
-  compareLabel: string;
-}) {
-  const up = pct > 0;
-  const flat = pct === 0;
-  return (
-    <span className={`dash-compare${flat ? " flat" : up ? " up" : " down"}`}>
-      {!flat && (
-        <Icon name={up ? "trendUp" : "minus"} size={12} />
-      )}
-      {flat ? "0%" : `${Math.abs(pct).toFixed(0)}%`}
-      <span className="dash-compare-muted">{compareLabel}</span>
-    </span>
-  );
-}
-
 function OnboardingChecklist() {
   const { dashboard } = useApp();
   const o = dashboard?.onboarding;
@@ -80,7 +65,7 @@ function OnboardingChecklist() {
   ];
 
   return (
-    <div className="card card-pad dash-rise" style={{ marginBottom: 16 }}>
+    <div className="card card-pad dash-rise dash-section" style={{ animationDelay: "0ms" }}>
       <div className="row spread" style={{ marginBottom: 12 }}>
         <div>
           <h3 style={{ margin: 0, fontSize: 15 }}>Get set up</h3>
@@ -125,7 +110,7 @@ function ConnectionBanner() {
   if (!disconnected) return null;
 
   return (
-    <div className="alert-banner warn dash-rise">
+    <div className="alert-banner warn dash-rise dash-section">
       <Icon name="alert" size={16} />
       <span>
         {disconnected} account{disconnected !== 1 ? "s aren't" : " isn't"} connected — copying may
@@ -147,6 +132,14 @@ function healthLabel(h: PipelineHealth) {
     worker_offline: "Offline",
   };
   return map[h] ?? h;
+}
+
+function copierHealthSummary(pipelines: DashboardPipeline[], workerHealthy: boolean) {
+  if (!workerHealthy) return { label: "Offline", tone: "warn" as const };
+  if (pipelines.some((p) => p.health === "error")) return { label: "Needs attention", tone: "warn" as const };
+  if (pipelines.some((p) => p.health === "active")) return { label: "Stable", tone: "ok" as const };
+  if (pipelines.length === 0) return { label: "No setups", tone: "plain" as const };
+  return { label: "Ready", tone: "plain" as const };
 }
 
 function ZeroState() {
@@ -216,13 +209,13 @@ export default function OverviewPage() {
     const accountCount = accounts.length;
     const connected = dashboard?.connected_accounts ?? 0;
     const portfolio = today?.total_equity ?? 0;
+    const equityOpen = today?.equity_open ?? null;
     const copies = today?.copies ?? 0;
     const closed = today?.closed ?? 0;
     const failed = today?.failed ?? 0;
-    const tradesTaken = copies + closed;
-    const tradesWon = Math.max(0, copies - failed);
-    const tradesLost = failed;
-    const openPnL = today?.net_equity_change ?? 0;
+    const dailyPnL = today?.net_equity_change ?? null;
+    const copySuccessRate = today?.copy_success_rate ?? null;
+    const avgLatency = today?.avg_latency_ms ?? null;
     const activeCopiers = dashboard?.active_copiers ?? 0;
     const masterIds = new Set(
       copiers.filter((c) => c.is_enabled).map((c) => c.master_account_id),
@@ -230,34 +223,29 @@ export default function OverviewPage() {
     const slaveIds = new Set(
       copiers.filter((c) => c.is_enabled).map((c) => c.follower_account_id),
     );
-    const openTrades = logs.filter(
-      (l) => l.status === "executed" && l.eventType.includes("open"),
-    ).length;
-    const successToday = logs.filter((l) => l.status === "executed").length;
-    const failedToday = logs.filter((l) => l.status === "failed").length;
-    const totalResolved = successToday + failedToday;
-    const winRate = totalResolved > 0 ? (successToday / totalResolved) * 100 : 0;
 
     return {
       accountCount,
       connected,
       portfolio,
-      tradesTaken,
-      tradesWon,
-      tradesLost,
-      openPnL,
+      equityOpen,
+      copies,
+      closed,
+      failed,
+      dailyPnL,
+      copySuccessRate,
+      avgLatency,
       activeCopiers,
       mastersConnected: masterIds.size,
       activeSlaves: slaveIds.size,
-      openTrades,
-      copiesToday: copies,
-      winRate,
-      netPnL: openPnL,
     };
-  }, [accounts.length, copiers, dashboard, logs]);
+  }, [accounts.length, copiers, dashboard]);
 
-  const recentLogs = logs.slice(0, 8);
+  const recentLogs = logs.slice(0, 10);
+  const openCopyLogs = useMemo(() => logs.filter(isOpenCopyLog).slice(0, 12), [logs]);
+  const closedCopyLogs = useMemo(() => logs.filter(isClosedCopyLog).slice(0, 12), [logs]);
   const pipelines = dashboard?.pipelines ?? [];
+  const healthSummary = copierHealthSummary(pipelines, workerHealthy);
 
   if (accounts.length === 0) return <ZeroState />;
 
@@ -267,7 +255,7 @@ export default function OverviewPage() {
         <div className="pt">
           <h1>Dashboard</h1>
           <p className="desc">
-            Portfolio, copier health, and today&apos;s execution — at a glance.
+            Portfolio equity, copy health, and today&apos;s execution — refreshed every few seconds.
           </p>
         </div>
         <div className="actions row gap12">
@@ -280,64 +268,79 @@ export default function OverviewPage() {
       <ConnectionBanner />
       <OnboardingChecklist />
 
-      <div className="dash-stat-grid">
+      <div className="dash-stat-grid dash-section">
         <DashStat
           index={0}
           label="Accounts"
           value={stats.accountCount}
           sub={
-            <CompareSub
-              pct={pctChange(stats.connected, Math.max(0, stats.connected - 1))}
-              compareLabel={`compared to ${Math.max(0, stats.connected - 1)}, yesterday`}
-            />
+            <span>
+              {stats.connected} connected · {stats.accountCount - stats.connected} offline
+            </span>
           }
         />
         <DashStat
           index={1}
-          label="Portfolio Value"
+          label="Portfolio value"
           value={fmtMoney(stats.portfolio)}
           sub={
-            <CompareSub
-              pct={pctChange(stats.portfolio, stats.portfolio - stats.openPnL)}
-              compareLabel={`compared to ${fmtMoney(Math.max(0, stats.portfolio - stats.openPnL))}, yesterday`}
-            />
+            stats.equityOpen != null ? (
+              <span>{fmtPctChange(stats.portfolio, stats.equityOpen)}</span>
+            ) : (
+              <span>Syncing start-of-day equity</span>
+            )
           }
         />
         <DashStat
           index={2}
-          label="Trades Taken"
-          value={stats.tradesTaken}
+          label="Copies today"
+          value={stats.copies}
           sub={
             <span>
-              Trades Won: {stats.tradesWon} · Trades Lost: {stats.tradesLost}
+              {stats.closed} closed · {stats.failed} failed
             </span>
           }
         />
         <DashStat
           index={3}
-          label="Open PnL"
-          value={fmtMoney(stats.openPnL)}
-          sub={<span>{stats.openTrades} open positions</span>}
+          label="Daily P&L"
+          value={fmtMoney(stats.dailyPnL)}
+          sub={<span>Portfolio change since start of day</span>}
         />
       </div>
 
-      <div className="dash-two-col">
-        <div className="card dash-panel dash-rise" style={{ animationDelay: "280ms" }}>
-          <div className="card-head">
-            <Icon name="branch" size={16} style={{ color: "var(--accent)" }} />
-            <h3>Copier Overview</h3>
-            <div className="grow" />
-            <Link href="/copiers" className="link-action" style={{ fontSize: 12 }}>
-              Open copy engine
-            </Link>
-          </div>
-          <div className="dash-mini-grid">
+      <div
+        className="card dash-panel dash-rise dash-copier-unified dash-section"
+        style={{ animationDelay: "280ms" }}
+      >
+        <div className="card-head">
+          <Icon name="branch" size={16} style={{ color: "var(--accent)" }} />
+          <h3>Copier</h3>
+          <span
+            className={`badge ${
+              healthSummary.tone === "ok"
+                ? "badge-ok"
+                : healthSummary.tone === "warn"
+                  ? "badge-warn"
+                  : "badge-plain"
+            }`}
+          >
+            {healthSummary.label}
+          </span>
+          <div className="grow" />
+          <Link href="/copiers" className="link-action" style={{ fontSize: 12 }}>
+            Open copy engine
+          </Link>
+        </div>
+
+        <div className="dash-copier-body">
+          <div className="dash-copier-pipelines">
             {pipelines.length === 0 ? (
               <EmptyHint icon="branch" title="No copy setups yet">
                 <Link href="/copiers/new">Create your first master → follower link</Link>
               </EmptyHint>
             ) : (
-              pipelines.slice(0, 3).map((p: DashboardPipeline) => {
+              pipelines.slice(0, 4).map((p: DashboardPipeline) => {
                 const m = accById(p.master_account_id);
                 const f = accById(p.follower_account_id);
                 return (
@@ -360,39 +363,41 @@ export default function OverviewPage() {
               })
             )}
           </div>
-        </div>
 
-        <div className="card dash-panel dash-rise" style={{ animationDelay: "350ms" }}>
-          <div className="card-head">
-            <Icon name="activity" size={16} style={{ color: "var(--pulse-deep)" }} />
-            <h3>Copier Health</h3>
-            {!workerHealthy && <span className="badge badge-warn">Offline</span>}
-          </div>
-          <div className="dash-health-grid">
-            <div className="dash-health-item">
-              <span className="dash-health-label">Active Slave Accounts</span>
-              <span className="dash-health-val">{stats.activeSlaves}</span>
-            </div>
-            <div className="dash-health-item">
-              <span className="dash-health-label">Masters Connected</span>
-              <span className="dash-health-val">{stats.mastersConnected}</span>
-            </div>
-            <div className="dash-health-item">
-              <span className="dash-health-label">Open Trades</span>
-              <span className="dash-health-val">{stats.openTrades}</span>
-            </div>
-            <div className="dash-health-item">
-              <span className="dash-health-label">Trades Copied Today</span>
-              <span className="dash-health-val">{stats.copiesToday}</span>
+          <div className="dash-copier-metrics">
+            <div className="dash-health-grid">
+              <div className="dash-health-item">
+                <span className="dash-health-label">Active followers</span>
+                <span className="dash-health-val">{stats.activeSlaves}</span>
+              </div>
+              <div className="dash-health-item">
+                <span className="dash-health-label">Masters linked</span>
+                <span className="dash-health-val">{stats.mastersConnected}</span>
+              </div>
+              <div className="dash-health-item">
+                <span className="dash-health-label">Copy success</span>
+                <span className="dash-health-val">
+                  {stats.copySuccessRate != null ? `${stats.copySuccessRate.toFixed(0)}%` : "—"}
+                </span>
+              </div>
+              <div className="dash-health-item">
+                <span className="dash-health-label">Avg latency</span>
+                <span className="dash-health-val">
+                  {stats.avgLatency != null ? fmtSpeedMs(stats.avgLatency) : "—"}
+                </span>
+              </div>
             </div>
           </div>
         </div>
       </div>
 
-      <div className="card dash-panel dash-rise dash-logs" style={{ animationDelay: "420ms" }}>
+      <div
+        className="card dash-panel dash-rise dash-logs dash-section"
+        style={{ animationDelay: "360ms" }}
+      >
         <div className="card-head">
           <Icon name="logs" size={16} />
-          <h3>Copier Logs</h3>
+          <h3>Recent copy log</h3>
           <Link href="/logs" className="link-action" style={{ fontSize: 12, marginLeft: "auto" }}>
             View all
           </Link>
@@ -403,17 +408,17 @@ export default function OverviewPage() {
               <tr>
                 <th>Status</th>
                 <th>Master</th>
-                <th>Slave</th>
+                <th>Follower</th>
                 <th>Symbol</th>
-                <th>Type</th>
-                <th>P/L</th>
+                <th>Side</th>
+                <th>Latency</th>
               </tr>
             </thead>
             <tbody>
               {recentLogs.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="dash-empty-cell">
-                    No Data
+                    No copy events yet today
                   </td>
                 </tr>
               ) : (
@@ -428,9 +433,9 @@ export default function OverviewPage() {
                       </td>
                       <td>{master?.account_label ?? master?.account_number ?? "—"}</td>
                       <td>{slave?.account_label ?? slave?.account_number ?? "—"}</td>
-                      <td className="mono">{l.symbol || l.mapSymbol || "—"}</td>
-                      <td className="capitalize">{l.side || l.eventType}</td>
-                      <td className="mono faint">—</td>
+                      <td className="mono">{l.symbol !== "—" ? l.symbol : l.mapSymbol || "—"}</td>
+                      <td className="capitalize">{l.side !== "—" ? l.side : "—"}</td>
+                      <td className="mono">{fmtSpeedMs(l.latency)}</td>
                     </tr>
                   );
                 })
@@ -440,50 +445,16 @@ export default function OverviewPage() {
         </div>
       </div>
 
-      <div className="dash-perf-grid">
-        <DashStat
-          index={0}
-          label="PnL"
-          value={fmtMoney(stats.netPnL)}
-          sub={
-            <CompareSub
-              pct={0}
-              compareLabel={`compared to ${fmtMoney(0)}, yesterday`}
-            />
-          }
-        />
-        <DashStat
-          index={1}
-          label="Win Rate"
-          value={`${stats.winRate.toFixed(2)}%`}
-          sub={
-            <CompareSub pct={0} compareLabel={`compared to 0%, yesterday`} />
-          }
-        />
-        <DashStat
-          index={2}
-          label="Best Winning Trade"
-          value={fmtMoney(0)}
-          sub={<span>Your best trade banked 0.00% profit</span>}
-        />
-        <DashStat
-          index={3}
-          label="Worst Trade"
-          value={fmtMoney(0)}
-          sub={<span>Your worst trade lost 0.00%</span>}
-        />
-      </div>
-
-      <div className="card dash-panel dash-rise dash-acct" style={{ animationDelay: "560ms" }}>
+      <div className="card dash-panel dash-rise dash-acct dash-section" style={{ animationDelay: "440ms" }}>
         <div className="card-head">
           <Icon name="server" size={16} />
-          <h3>Account Information</h3>
+          <h3>Accounts & copy activity</h3>
         </div>
         <Tabs
           tabs={[
             { value: "accounts", label: "Accounts" },
-            { value: "open", label: "Open Positions" },
-            { value: "closed", label: "Closed Positions" },
+            { value: "open", label: "Open copies" },
+            { value: "closed", label: "Closed today" },
           ]}
           value={acctTab}
           onChange={setAcctTab}
@@ -500,55 +471,65 @@ export default function OverviewPage() {
                   </div>
                 </div>
                 <div className="row gap10">
-                  <span className="mono">{fmtMoney(a.equity, a.currency ? `${a.currency} ` : "$")}</span>
+                  <div className="text-right">
+                    <div className="mono">{fmtMoney(a.equity, a.currency ? `${a.currency} ` : "$")}</div>
+                    {a.daily_equity_change != null ? (
+                      <div
+                        className="faint"
+                        style={{
+                          fontSize: 11,
+                          color:
+                            a.daily_equity_change >= 0 ? "var(--success)" : "var(--error)",
+                        }}
+                      >
+                        {a.daily_equity_change >= 0 ? "+" : ""}
+                        {fmtMoney(a.daily_equity_change, a.currency ? `${a.currency} ` : "$")} today
+                      </div>
+                    ) : null}
+                  </div>
                   <StatusBadge status={connectionBadge(a.connection_status)} />
                 </div>
               </Link>
             ))}
           {acctTab === "open" &&
-            (recentLogs.filter((l) => l.status === "executed" && l.eventType.includes("open"))
-              .length === 0 ? (
-              <EmptyHint icon="activity" title="No open positions">
-                Open trades on your master will appear here when copied.
+            (openCopyLogs.length === 0 ? (
+              <EmptyHint icon="activity" title="No open copies today">
+                Successful copy opens from your execution log appear here — not live broker positions.
               </EmptyHint>
             ) : (
-              recentLogs
-                .filter((l) => l.status === "executed" && l.eventType.includes("open"))
-                .map((l) => (
-                  <div key={l.id} className="dash-acct-row static">
-                    <div>
-                      <div className="mono" style={{ fontWeight: 600 }}>
-                        {l.symbol || l.mapSymbol}
-                      </div>
-                      <div className="faint" style={{ fontSize: 11.5 }}>
-                        {l.side} · {l.lotsExec || l.lotsReq} lots
-                      </div>
+              openCopyLogs.map((l) => (
+                <div key={l.id} className="dash-acct-row static">
+                  <div>
+                    <div className="mono" style={{ fontWeight: 600 }}>
+                      {l.symbol !== "—" ? l.symbol : l.mapSymbol}
                     </div>
-                    <span className="faint mono">{fmtClock(l.t)}</span>
+                    <div className="faint" style={{ fontSize: 11.5 }}>
+                      {l.side} · {l.lotsExec || l.lotsReq} lots copied
+                    </div>
                   </div>
-                ))
+                  <span className="faint mono">{fmtClock(l.t)}</span>
+                </div>
+              ))
             ))}
           {acctTab === "closed" &&
-            (recentLogs.filter((l) => l.eventType.includes("close")).length === 0 ? (
-              <EmptyHint icon="logs" title="No closed positions today">
-                Closed copies will show up here from your copy log.
+            (closedCopyLogs.length === 0 ? (
+              <EmptyHint icon="logs" title="No closes today">
+                Copy close events from today will appear here.
               </EmptyHint>
             ) : (
-              recentLogs
-                .filter((l) => l.eventType.includes("close"))
-                .map((l) => (
-                  <div key={l.id} className="dash-acct-row static">
-                    <div>
-                      <div className="mono" style={{ fontWeight: 600 }}>
-                        {l.symbol || l.mapSymbol}
-                      </div>
-                      <div className="faint" style={{ fontSize: 11.5 }}>
-                        {l.side} · closed
-                      </div>
+              closedCopyLogs.map((l) => (
+                <div key={l.id} className="dash-acct-row static">
+                  <div>
+                    <div className="mono" style={{ fontWeight: 600 }}>
+                      {l.symbol !== "—" ? l.symbol : l.mapSymbol}
                     </div>
-                    <StatusBadge status={l.status} dot={false} />
+                    <div className="faint" style={{ fontSize: 11.5 }}>
+                      {l.side} · closed on follower
+                    </div>
                   </div>
-                ))
+                  <span className="faint mono">{fmtClock(l.t)}</span>
+                </div>
+              ))
             ))}
         </div>
       </div>
