@@ -12,8 +12,18 @@ export function fmtClock(d: Date): string {
 
 export function fmtMoney(n: number | null | undefined, cur = ""): string {
   if (n == null) return "—";
-  const s = n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  return cur ? `${cur}${s}` : `$${s}`;
+  const abs = Math.abs(n).toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  const prefix = cur || "$";
+  if (n < 0) return `-${prefix}${abs}`;
+  return `${prefix}${abs}`;
+}
+
+export function pnlClass(n: number | null | undefined): "up" | "down" | "flat" {
+  if (n == null || n === 0) return "flat";
+  return n > 0 ? "up" : "down";
 }
 
 export function fmtInt(n: number): string {

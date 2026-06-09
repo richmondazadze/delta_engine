@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { Icon } from "@/components/icons/Icon";
 import { EmptyHint, StatusBadge, Tabs } from "@/components/ui";
 import { useApp } from "@/components/shell/AppProvider";
+import { PageIntro } from "@/components/shell/PageIntro";
 import {
   accountDisplayName,
   connectionBadge,
@@ -12,6 +13,8 @@ import {
   fmtMoney,
   fmtPctChange,
   fmtSpeedMs,
+  humanExecutionStatus,
+  pnlClass,
 } from "@/lib/format";
 import { PlatformBadge } from "@/components/PlatformIcon";
 import type { DashboardPipeline, LogRow, PipelineHealth } from "@/lib/types";
@@ -42,10 +45,11 @@ function DashStat({
   sub?: React.ReactNode;
   index?: number;
 }) {
+  const valueIsPlain = typeof value === "string" || typeof value === "number";
   return (
     <div className="dash-stat" style={{ animationDelay: `${index * 70}ms` }}>
       <div className="dash-stat-label">{label}</div>
-      <div className="dash-stat-value">{value}</div>
+      {valueIsPlain ? <div className="dash-stat-value">{value}</div> : value}
       {sub ? <div className="dash-stat-sub">{sub}</div> : null}
     </div>
   );
@@ -128,10 +132,34 @@ function healthLabel(h: PipelineHealth) {
     active: "Copying",
     idle: "Ready",
     paused: "Paused",
-    error: "Issue",
+    error: "Needs fix",
     worker_offline: "Offline",
   };
   return map[h] ?? h;
+}
+
+function healthBadgeClass(h: PipelineHealth) {
+  if (h === "active") return "badge-ok";
+  if (h === "error" || h === "worker_offline") return "badge-err";
+  if (h === "paused") return "badge-warn";
+  return "badge-muted";
+}
+
+function pipelineDetail(p: DashboardPipeline) {
+  if (p.health === "error" && p.last_status) {
+    const status = humanExecutionStatus(p.last_status);
+    const symbol = p.last_symbol ? ` · ${p.last_symbol}` : "";
+    const err = p.last_error_message?.replace(/_/g, " ");
+    if (err) return `${status}${symbol} — ${err}`;
+    return `Last event: ${status}${symbol}`;
+  }
+  if (p.health === "active" && p.last_symbol) {
+    return `Last copied: ${p.last_symbol}`;
+  }
+  if (p.health === "idle") return "No copy events today";
+  if (p.health === "worker_offline") return "Copy service not reachable";
+  if (p.health === "paused") return "Turn this setup on in copy engine";
+  return null;
 }
 
 function copierHealthSummary(pipelines: DashboardPipeline[], workerHealthy: boolean) {
@@ -246,29 +274,44 @@ export default function OverviewPage() {
   const closedCopyLogs = useMemo(() => logs.filter(isClosedCopyLog).slice(0, 12), [logs]);
   const pipelines = dashboard?.pipelines ?? [];
   const healthSummary = copierHealthSummary(pipelines, workerHealthy);
+  const issueCount = pipelines.filter((p) => p.health === "error").length;
+  const pnlTone = pnlClass(stats.dailyPnL);
 
   if (accounts.length === 0) return <ZeroState />;
 
   return (
     <div className="page-inner dash-page">
-      <div className="page-head dash-rise">
-        <div className="pt">
-          <h1>Dashboard</h1>
-          <p className="desc">
-            Portfolio equity, copy health, and today&apos;s execution — refreshed every few seconds.
-          </p>
-        </div>
-        <div className="actions row gap12">
+      <PageIntro
+        className="dash-rise"
+        description="Portfolio equity, copy health, and today's execution — refreshed every few seconds."
+        actions={
           <span className="faint" style={{ fontSize: 12 }}>
             Updated {secondsAgo(lastUpdatedAt)}
           </span>
-        </div>
-      </div>
+        }
+      />
 
       <ConnectionBanner />
       <OnboardingChecklist />
 
-      <div className="dash-stat-grid dash-section">
+      {issueCount > 0 && workerHealthy ? (
+        <div className="dash-issues-banner dash-rise dash-section" style={{ marginBottom: 20 }}>
+          <Icon name="alert" size={16} style={{ color: "var(--warning)", flex: "none", marginTop: 2 }} />
+          <div className="grow">
+            <strong>
+              {issueCount} copy path{issueCount !== 1 ? "s" : ""} need attention
+            </strong>
+            <span className="faint" style={{ display: "block", marginTop: 4, fontSize: 12.5 }}>
+              Service is online — check the latest event on each path below or open the copy log.
+            </span>
+          </div>
+          <Link href="/logs" className="btn btn-ghost btn-sm">
+            View copy log
+          </Link>
+        </div>
+      ) : null}
+
+      <div className="dash-stat-grid">
         <DashStat
           index={0}
           label="Accounts"
@@ -297,20 +340,22 @@ export default function OverviewPage() {
           value={stats.copies}
           sub={
             <span>
-              {stats.closed} closed · {stats.failed} failed
+              {stats.closed} closed · {stats.failed} failed / rejected
             </span>
           }
         />
         <DashStat
           index={3}
           label="Daily P&L"
-          value={fmtMoney(stats.dailyPnL)}
+          value={
+            <span className={`dash-stat-value pnl-${pnlTone}`}>{fmtMoney(stats.dailyPnL)}</span>
+          }
           sub={<span>Portfolio change since start of day</span>}
         />
       </div>
 
       <div
-        className="card dash-panel dash-rise dash-copier-unified dash-section"
+        className="card dash-panel dash-rise dash-copier-unified dash-section dash-section-gap"
         style={{ animationDelay: "280ms" }}
       >
         <div className="card-head">
@@ -328,6 +373,11 @@ export default function OverviewPage() {
             {healthSummary.label}
           </span>
           <div className="grow" />
+          {issueCount > 0 ? (
+            <Link href="/logs" className="link-action" style={{ fontSize: 12, marginRight: 12 }}>
+              View issues
+            </Link>
+          ) : null}
           <Link href="/copiers" className="link-action" style={{ fontSize: 12 }}>
             Open copy engine
           </Link>
@@ -343,11 +393,18 @@ export default function OverviewPage() {
               pipelines.slice(0, 4).map((p: DashboardPipeline) => {
                 const m = accById(p.master_account_id);
                 const f = accById(p.follower_account_id);
+                const detail = pipelineDetail(p);
                 return (
-                  <div key={p.copier_id} className="dash-pipe-row">
+                  <Link
+                    key={p.copier_id}
+                    href={`/logs?copier=${p.copier_id}`}
+                    className="dash-pipe-row"
+                  >
                     <div className="row spread">
                       <span style={{ fontWeight: 600, fontSize: 13 }}>{p.label}</span>
-                      <span className="badge badge-plain">{healthLabel(p.health)}</span>
+                      <span className={`badge ${healthBadgeClass(p.health)}`}>
+                        {healthLabel(p.health)}
+                      </span>
                     </div>
                     <div className="faint" style={{ fontSize: 12, marginTop: 4 }}>
                       {m
@@ -358,7 +415,8 @@ export default function OverviewPage() {
                         ? accountDisplayName(f.account_label, f.account_number).split(" — ")[0]
                         : "Follower"}
                     </div>
-                  </div>
+                    {detail ? <div className="dash-pipe-detail">{detail}</div> : null}
+                  </Link>
                 );
               })
             )}
@@ -375,14 +433,18 @@ export default function OverviewPage() {
                 <span className="dash-health-val">{stats.mastersConnected}</span>
               </div>
               <div className="dash-health-item">
-                <span className="dash-health-label">Copy success</span>
-                <span className="dash-health-val">
+                <span className="dash-health-label">Copy success today</span>
+                <span
+                  className={`dash-health-val${stats.copySuccessRate == null ? " metric-empty" : ""}`}
+                >
                   {stats.copySuccessRate != null ? `${stats.copySuccessRate.toFixed(0)}%` : "—"}
                 </span>
               </div>
               <div className="dash-health-item">
-                <span className="dash-health-label">Avg latency</span>
-                <span className="dash-health-val">
+                <span className="dash-health-label">Avg latency today</span>
+                <span
+                  className={`dash-health-val${stats.avgLatency == null ? " metric-empty" : ""}`}
+                >
                   {stats.avgLatency != null ? fmtSpeedMs(stats.avgLatency) : "—"}
                 </span>
               </div>

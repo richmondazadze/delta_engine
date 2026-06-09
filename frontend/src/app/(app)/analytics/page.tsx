@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Icon } from "@/components/icons/Icon";
+import { PageIntro } from "@/components/shell/PageIntro";
 import { useAccessToken } from "@/components/shell/AppProvider";
 import * as api from "@/lib/data";
 
@@ -73,12 +74,7 @@ export default function AnalyticsPage() {
   if (!summary || summary.total_events === 0) {
     return (
       <div className="page-inner">
-        <div className="page-head">
-          <div className="pt">
-            <h1>Performance</h1>
-            <p className="desc">See how your copying is going — wins, skips, and symbols.</p>
-          </div>
-        </div>
+        <PageIntro description="See how your copying is going — wins, skips, and symbols." />
         <div className="card card-pad">
           <p className="faint" style={{ margin: 0, fontSize: 13.5 }}>
             No copy history yet. Turn on a setup and place a trade on your master — stats will appear here.
@@ -113,18 +109,15 @@ export default function AnalyticsPage() {
 
   return (
     <div className="page-inner">
-      <div className="page-head">
-        <div className="pt">
-          <h1>Performance</h1>
-          <p className="desc">
-            Plain-language stats from your copy history — no jargon required.
-          </p>
-        </div>
-        <Link href="/logs" className="btn btn-ghost btn-sm">
-          <Icon name="logs" size={14} />
-          Open copy log
-        </Link>
-      </div>
+      <PageIntro
+        description="Plain-language stats from your copy history — no jargon required."
+        actions={
+          <Link href="/logs" className="btn btn-ghost btn-sm">
+            <Icon name="logs" size={14} />
+            Open copy log
+          </Link>
+        }
+      />
 
       <InsightCard tone={insightTone} title={insightTitle} body={insightBody} />
 

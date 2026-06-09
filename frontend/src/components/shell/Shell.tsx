@@ -160,6 +160,8 @@ export function Header({ onMenuOpen }: { onMenuOpen?: () => void }) {
   const { paused, setPaused, workerHealthy, dashboard } = useApp();
   const [notifOpen, setNotifOpen] = useState(false);
   const unread = (dashboard?.today?.copies ?? 0) + (dashboard?.today?.failed ?? 0);
+  const pipelineIssues =
+    dashboard?.pipelines?.filter((p) => p.health === "error").length ?? 0;
 
   let crumbs = CRUMB[pathname];
   if (!crumbs) {
@@ -215,7 +217,11 @@ export function Header({ onMenuOpen }: { onMenuOpen?: () => void }) {
           ) : workerHealthy ? (
             <>
               <span className="dot" />
-              <span className="watchdog-label">Copy service online</span>
+              <span className="watchdog-label">
+                {pipelineIssues > 0
+                  ? `Online · ${pipelineIssues} path${pipelineIssues !== 1 ? "s" : ""} need review`
+                  : "Copy service online"}
+              </span>
             </>
           ) : (
             <>

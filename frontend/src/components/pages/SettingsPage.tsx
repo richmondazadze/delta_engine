@@ -4,6 +4,7 @@ import { Icon } from "@/components/icons/Icon";
 import { Toggle } from "@/components/ui";
 import Link from "next/link";
 import { SymbolMappingsPanel } from "@/components/settings/SymbolMappingsPanel";
+import { PageIntro } from "@/components/shell/PageIntro";
 import { useApp } from "@/components/shell/AppProvider";
 
 function Row({
@@ -51,12 +52,7 @@ export default function SettingsPage() {
 
   return (
     <div className="page-inner" style={{ maxWidth: 760 }}>
-      <div className="page-head">
-        <div className="pt">
-          <h1>Settings</h1>
-          <p className="desc">Engine, workspace, and plan configuration.</p>
-        </div>
-      </div>
+      <PageIntro description="Engine, workspace, and plan configuration." />
       <div className="card" style={{ overflow: "hidden", marginBottom: 16 }}>
         <div className="card-head">
           <Icon name="sliders" size={16} style={{ color: "var(--accent)" }} />

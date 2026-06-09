@@ -14,6 +14,7 @@ import {
   useViewMode,
   ViewModeToggle,
 } from "@/components/ui";
+import { PageIntro } from "@/components/shell/PageIntro";
 import { useApp, useAccessToken } from "@/components/shell/AppProvider";
 import {
   accountDisplayName,
@@ -432,20 +433,15 @@ export default function AccountsPage() {
   if (accounts.length === 0) {
     return (
       <div className="page-inner">
-        <div className="page-head">
-          <div className="pt">
-            <h1>Trading Accounts</h1>
-            <p className="desc">
-              Connect and manage MT5 accounts. Passwords are write-only and encrypted at rest.
-            </p>
-          </div>
-          <div className="actions">
+        <PageIntro
+          description="Connect and manage MT5 accounts. Passwords are write-only and encrypted at rest."
+          actions={
             <Link href="/accounts/new" className="btn btn-dark">
               <Icon name="plus" size={15} />
               Link Account
             </Link>
-          </div>
-        </div>
+          }
+        />
         <div className="card">
           <EmptyHint icon="server" title="No accounts linked">
             Link your first MT5 terminal to begin copying.
@@ -457,15 +453,9 @@ export default function AccountsPage() {
 
   return (
     <div className="page-inner">
-      <div className="page-head">
-        <div className="pt">
-          <h1>Trading Accounts</h1>
-          <p className="desc">
-            Connect MT5 or DXtrade accounts (FTMO, Lark, and more). Passwords are write-only
-            and encrypted at rest.
-          </p>
-        </div>
-        <div className="actions">
+      <PageIntro
+        description="Connect MT5 or DXtrade accounts (FTMO, Lark, and more). Passwords are write-only and encrypted at rest."
+        actions={
           <Tip text={atQuota ? "Account limit reached" : "Link a new MT5 terminal"}>
             <Link
               href={atQuota ? "#" : "/accounts/new"}
@@ -477,8 +467,8 @@ export default function AccountsPage() {
               Link Account
             </Link>
           </Tip>
-        </div>
-      </div>
+        }
+      />
       <div
         className="card"
         style={{

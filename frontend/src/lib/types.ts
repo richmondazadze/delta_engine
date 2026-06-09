@@ -197,6 +197,8 @@ export interface DashboardPipeline {
   last_event_at: string | null;
   last_status: string | null;
   last_symbol: string | null;
+  last_event_type: string | null;
+  last_error_message: string | null;
   health: PipelineHealth;
 }
 

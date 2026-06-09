@@ -182,9 +182,9 @@ export function LinkAccountForm() {
         <Icon name="chevronLeft" size={14} />
         Back to accounts
       </Link>
-      <h1 style={{ fontSize: 21, margin: "0 0 18px", letterSpacing: "-0.02em" }}>
-        Link Trading Account
-      </h1>
+      <p className="desc" style={{ margin: "0 0 18px", maxWidth: 560 }}>
+        Connect a broker terminal with your login credentials. Passwords are encrypted and never shown again.
+      </p>
       <div className="alert alert-info" style={{ marginBottom: 20 }}>
         <span className="a-ico">
           <Icon name="lock" size={16} />

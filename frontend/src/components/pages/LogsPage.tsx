@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { PageIntro } from "@/components/shell/PageIntro";
 import { Icon } from "@/components/icons/Icon";
 import { ForensicDrawer } from "@/components/forensic/ForensicDrawer";
 import { EmptyHint, Seg, StatusBadge, TimingCell } from "@/components/ui";
@@ -187,11 +189,19 @@ function MobileLogList({
 
 export default function LogsPage() {
   const { accounts, logs, logsTotal, cpById } = useApp();
+  const searchParams = useSearchParams();
+  const copierFilter = searchParams.get("copier") ?? "all";
   const [range, setRange] = useState("24h");
   const [statusSel, setStatusSel] = useState(() => new Set(STATUSES.map((s) => s.v)));
   const [sym, setSym] = useState("");
   const [master, setMaster] = useState("all");
   const [sel, setSel] = useState<LogRow | null>(null);
+
+  useEffect(() => {
+    if (copierFilter !== "all" && cpById(copierFilter)) {
+      setStatusSel(new Set(STATUSES.map((s) => s.v)));
+    }
+  }, [copierFilter, cpById]);
 
   const filtered = useMemo(() => {
     const cutoff =
@@ -208,9 +218,10 @@ export default function LogsPage() {
         const cp = cpById(r.copierId);
         if (!cp || cp.master_account_id !== master) return false;
       }
+      if (copierFilter !== "all" && r.copierId !== copierFilter) return false;
       return true;
     });
-  }, [logs, statusSel, sym, master, range, cpById]);
+  }, [logs, statusSel, sym, master, range, copierFilter, cpById]);
 
   const toggleStatus = (v: string) =>
     setStatusSel((s) => {
@@ -223,19 +234,15 @@ export default function LogsPage() {
   return (
     <div className="logs-page-root" style={{ height: "100%", display: "flex", flexDirection: "column" }}>
       <div className="logs-page-head" style={{ padding: "20px 22px 0", flex: "none" }}>
-        <div className="page-head" style={{ marginBottom: 14 }}>
-          <div className="pt">
-            <h1>Copy log</h1>
-            <p className="desc">
-              A running list of trades copied to your accounts. Tap a row for full details.
-            </p>
-          </div>
-          <div className="actions">
+        <PageIntro
+          style={{ marginBottom: 14 }}
+          description="A running list of trades copied to your accounts. Tap a row for full details."
+          actions={
             <span className="badge badge-plain" style={{ fontSize: 12 }}>
               {fmtInt(filtered.length)} / {fmtInt(logsTotal)} rows
             </span>
-          </div>
-        </div>
+          }
+        />
       </div>
       <div className="lg-toolbar">
         <Seg

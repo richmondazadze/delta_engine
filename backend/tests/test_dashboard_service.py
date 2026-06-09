@@ -30,6 +30,12 @@ def test_activity_message_copy_success():
     assert "Copied EURUSD Buy" in msg
 
 
+def test_today_failed_counts_rejected_without_trade_event_type():
+    copier = {"is_enabled": True}
+    last = {"status": "rejected", "event_type": "unknown"}
+    assert _pipeline_health(copier, last, True) == "error"
+
+
 def test_build_dashboard_summary_empty():
     sb = MagicMock()
     sb.table.return_value.select.return_value.eq.return_value.execute.return_value.data = []

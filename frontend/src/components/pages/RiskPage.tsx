@@ -9,6 +9,7 @@ import {
   Meter,
   Toggle,
 } from "@/components/ui";
+import { PageIntro } from "@/components/shell/PageIntro";
 import { useApp, useAccessToken } from "@/components/shell/AppProvider";
 import { accountDisplayName, fmtMoney } from "@/lib/format";
 import * as api from "@/lib/data";
@@ -137,15 +138,7 @@ export default function RiskPage() {
 
   return (
     <div className="page-inner">
-      <div className="page-head">
-        <div className="pt">
-          <h1>Risk limits</h1>
-          <p className="desc">
-            Sentinel guardrails across every terminal. Breaching a limit can auto-lock the node and
-            flatten exposure.
-          </p>
-        </div>
-      </div>
+      <PageIntro description="Daily loss caps, symbol filters, and lockouts on each follower account." />
       {accounts.length === 0 ? (
         <div className="card">
           <EmptyHint icon="shield" title="No accounts to guard">

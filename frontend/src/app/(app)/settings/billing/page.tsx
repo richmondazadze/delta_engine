@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Icon } from "@/components/icons/Icon";
+import { PageIntro } from "@/components/shell/PageIntro";
 import { useApp, useAccessToken } from "@/components/shell/AppProvider";
 import * as api from "@/lib/data";
 
@@ -85,19 +86,20 @@ export default function BillingPage() {
 
   return (
     <div className="page-inner" style={{ maxWidth: 820 }}>
-      <div className="page-head">
-        <div className="pt">
-          <h1>Billing</h1>
-          <p className="desc">
-            Per-account pricing. You are on{" "}
-            <strong>{planLabel}</strong> ({accountLimit} accounts, {followerLimit} copy links).
-          </p>
-        </div>
-        <Link href="/settings" className="btn btn-ghost btn-sm">
-          <Icon name="chevronLeft" size={14} />
-          Settings
-        </Link>
-      </div>
+      <PageIntro
+        description={
+          <>
+            Per-account pricing. You are on <strong>{planLabel}</strong> ({accountLimit} accounts,{" "}
+            {followerLimit} copy links).
+          </>
+        }
+        actions={
+          <Link href="/settings" className="btn btn-ghost btn-sm">
+            <Icon name="chevronLeft" size={14} />
+            Settings
+          </Link>
+        }
+      />
 
       <div className="card card-pad" style={{ marginBottom: 16 }}>
         <div className="row spread" style={{ flexWrap: "wrap", gap: 12 }}>

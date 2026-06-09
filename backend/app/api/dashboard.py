@@ -21,6 +21,9 @@ class DashboardToday(BaseModel):
     failed: int
     net_equity_change: Optional[float] = None
     total_equity: Optional[float] = None
+    equity_open: Optional[float] = None
+    copy_success_rate: Optional[float] = None
+    avg_latency_ms: Optional[int] = None
 
 
 class DashboardOnboarding(BaseModel):

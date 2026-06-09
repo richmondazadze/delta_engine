@@ -43,7 +43,8 @@ def build_dashboard_summary(sb, user_id: str) -> dict[str, Any]:
         sb.table("execution_events")
         .select(
             "id, status, event_type, copier_relation_id, master_account_id, "
-            "follower_account_id, symbol_master, side, created_at, latency_ms"
+            "follower_account_id, symbol_master, side, created_at, latency_ms, "
+            "e2e_ms, error_message"
         )
         .eq("user_id", user_id)
         .gte("created_at", today_start)
@@ -63,10 +64,7 @@ def build_dashboard_summary(sb, user_id: str) -> dict[str, Any]:
         if e.get("event_type") == "position_closed" and e.get("status") == "closed"
     )
     today_failed = sum(
-        1
-        for e in events
-        if e.get("status") in ("failed", "rejected")
-        and e.get("event_type") in ("position_opened", "position_closed")
+        1 for e in events if e.get("status") in ("failed", "rejected")
     )
 
     copy_attempts = today_copies + today_failed
@@ -74,7 +72,11 @@ def build_dashboard_summary(sb, user_id: str) -> dict[str, Any]:
     if copy_attempts > 0:
         copy_success_rate = round((today_copies / copy_attempts) * 100, 2)
 
-    latencies = [int(e["latency_ms"]) for e in events if e.get("latency_ms") is not None]
+    latencies = [
+        int(e["e2e_ms"] if e.get("e2e_ms") is not None else e["latency_ms"])
+        for e in events
+        if e.get("e2e_ms") is not None or e.get("latency_ms") is not None
+    ]
     avg_latency_ms: Optional[int] = None
     if latencies:
         avg_latency_ms = round(sum(latencies) / len(latencies))
@@ -150,6 +152,8 @@ def build_dashboard_summary(sb, user_id: str) -> dict[str, Any]:
                 "last_event_at": last.get("created_at") if last else None,
                 "last_status": last.get("status") if last else None,
                 "last_symbol": last.get("symbol_master") if last else None,
+                "last_event_type": last.get("event_type") if last else None,
+                "last_error_message": last.get("error_message") if last else None,
                 "health": _pipeline_health(c, last, health.get("healthy", False)),
             }
         )

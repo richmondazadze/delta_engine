@@ -214,7 +214,7 @@ html, body {
   padding: 0 26px; gap: 16px;
 }
 .header .crumb { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--faint); }
-.header .crumb .cur { color: var(--dark); font-weight: 600; font-size: 15px; letter-spacing: -0.01em; }
+.header .crumb .cur { color: var(--dark); font-weight: 600; font-size: 16px; letter-spacing: -0.02em; }
 .header .crumb .sep { color: var(--border-strong); }
 .header .spacer { flex: 1; }
 .header .h-right { display: flex; align-items: center; gap: 14px; }
@@ -359,11 +359,20 @@ html, body {
   to { opacity: 1; transform: translateY(0); }
 }
 .dash-rise { animation: dash-rise 0.45s var(--ease) both; }
-.dash-page .page-head h1 { font-size: 22px; letter-spacing: -0.02em; }
+.dash-page .page-head { margin-bottom: 18px; }
 .dash-section { margin-bottom: 28px; }
+.dash-section-gap { margin-top: 28px; }
 .dash-stat-grid {
-  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px; margin-bottom: 0;
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px;
+  margin-bottom: 28px;
 }
+.dash-stat-value.pnl-up { color: var(--success); }
+.dash-stat-value.pnl-down { color: var(--error); }
+.dash-stat-value.pnl-flat { color: var(--dark); }
+.dash-stat-value.metric-empty {
+  font-size: 18px; font-weight: 500; color: var(--text-quaternary);
+}
+.dash-stat-sub.metric-hint { font-style: normal; }
 .dash-perf-grid {
   display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px; margin-bottom: 0;
 }
@@ -402,10 +411,25 @@ html, body {
 .dash-panel { overflow: hidden; }
 .dash-mini-grid { padding: 4px 0 8px; display: flex; flex-direction: column; gap: 10px; }
 .dash-pipe-row {
-  padding: 12px 16px; border-top: 1px solid var(--border);
+  display: block; padding: 12px 16px; border-top: 1px solid var(--border);
   transition: background var(--dur) var(--ease);
+  text-decoration: none; color: inherit;
 }
 .dash-pipe-row:hover { background: var(--panel); }
+.dash-pipe-row:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: -2px;
+}
+.dash-pipe-detail {
+  font-size: 11.5px; color: var(--text-tertiary); margin-top: 4px; line-height: 1.4;
+}
+.dash-pipe-detail strong { color: var(--error); font-weight: 600; }
+.dash-issues-banner {
+  display: flex; align-items: flex-start; gap: 10px; flex-wrap: wrap;
+  padding: 12px 16px; margin-bottom: 20px;
+  border: 1px solid var(--warning); border-radius: var(--r-card);
+  background: var(--warning-tint); font-size: 13px; color: var(--dark);
+}
+.dash-issues-banner .grow { flex: 1; min-width: 12rem; }
 .dash-health-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; background: var(--border); }
 .dash-health-item {
   background: var(--canvas); padding: 16px 18px;

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Icon } from "@/components/icons/Icon";
 import { ConfirmModal, EmptyHint, Toggle } from "@/components/ui";
+import { PageIntro } from "@/components/shell/PageIntro";
 import { useApp, useAccessToken } from "@/components/shell/AppProvider";
 import { accountDisplayName, fmtMoney } from "@/lib/format";
 import {
@@ -387,14 +388,9 @@ export default function CopiersPage() {
 
   return (
     <div className="page-inner">
-      <div className="page-head">
-        <div className="pt">
-          <h1>Copy engine</h1>
-          <p className="desc">
-            Manage master accounts and the followers that mirror their trades. Turn copying on or off anytime.
-          </p>
-        </div>
-        <div className="actions">
+      <PageIntro
+        description="Manage master accounts and the followers that mirror their trades. Turn copying on or off anytime."
+        actions={
           <Link
             href={accounts.length < 2 ? "#" : "/copiers/new"}
             className={`btn btn-accent${accounts.length < 2 ? " disabled" : ""}`}
@@ -404,8 +400,8 @@ export default function CopiersPage() {
             <Icon name="plus" size={15} />
             Add copy setup
           </Link>
-        </div>
-      </div>
+        }
+      />
 
       {copiers.length > 0 && (
         <SummaryStrip
@@ -588,10 +584,7 @@ export function CopierFormPage({ copierId }: { copierId?: string }) {
         <Icon name="chevronLeft" size={14} />
         Back to copy engine
       </Link>
-      <h1 style={{ fontSize: 21, margin: "0 0 6px", letterSpacing: "-0.02em" }}>
-        {existing ? "Edit copy setup" : "New copy setup"}
-      </h1>
-      <p className="muted" style={{ margin: "0 0 18px", fontSize: 13.5 }}>
+      <p className="desc" style={{ margin: "0 0 18px", maxWidth: 620 }}>
         Choose which account leads and which follows, then set how large each copied trade should be.
       </p>
       <div className="grid-form-two-col">
