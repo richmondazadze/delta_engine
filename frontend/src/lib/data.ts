@@ -133,16 +133,24 @@ export async function fetchExecutionEvents(
     limit?: number;
     offset?: number;
     status?: string;
+    status_groups?: string;
     symbol?: string;
     copier_relation_id?: string;
+    master_account_id?: string;
+    date_from?: string;
+    date_to?: string;
   } = {},
 ) {
   const qs = new URLSearchParams();
   if (params.limit != null) qs.set("limit", String(params.limit));
   if (params.offset != null) qs.set("offset", String(params.offset));
   if (params.status) qs.set("status", params.status);
+  if (params.status_groups) qs.set("status_groups", params.status_groups);
   if (params.symbol) qs.set("symbol", params.symbol);
   if (params.copier_relation_id) qs.set("copier_relation_id", params.copier_relation_id);
+  if (params.master_account_id) qs.set("master_account_id", params.master_account_id);
+  if (params.date_from) qs.set("date_from", params.date_from);
+  if (params.date_to) qs.set("date_to", params.date_to);
   const q = qs.toString();
   return apiFetch<{ events: ExecutionEvent[]; total: number; page: number; per_page: number }>(
     `/api/execution-events${q ? `?${q}` : ""}`,
@@ -329,6 +337,21 @@ export async function createSymbolMapping(
 ) {
   return apiFetch<SymbolMapping>("/api/symbol-mappings", token, {
     method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export async function updateSymbolMapping(
+  token: string,
+  id: string,
+  body: {
+    master_symbol?: string;
+    follower_symbol?: string;
+    is_active?: boolean;
+  },
+) {
+  return apiFetch<SymbolMapping>(`/api/symbol-mappings/${id}`, token, {
+    method: "PATCH",
     body: JSON.stringify(body),
   });
 }

@@ -10,7 +10,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type {
   Account,
@@ -24,7 +24,8 @@ import type {
 import { executionEventToLogRow } from "@/lib/format";
 import * as api from "@/lib/data";
 
-const POLL_MS = 10_000;
+const DASHBOARD_POLL_MS = 5_000;
+const CONTEXT_LOGS_POLL_MS = 15_000;
 
 interface AppContextValue {
   loading: boolean;
@@ -63,6 +64,7 @@ export function useApp() {
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
+  const pathname = usePathname();
   const supabase = createClient();
   const [loading, setLoading] = useState(true);
   const [token, setToken] = useState<string | null>(null);
@@ -82,6 +84,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const seenActivityIds = useRef<Set<string>>(new Set());
   const activityBootstrapped = useRef(false);
+  const refreshBusy = useRef(false);
 
   const toast = useCallback((msg: string, kind: ToastKind = "ok") => {
     const id = Math.random().toString(36).slice(2);
@@ -118,7 +121,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         api.fetchAccounts(accessToken),
         api.fetchCopiers(accessToken),
         api.fetchRiskProfiles(accessToken),
-        api.fetchExecutionEvents(accessToken, { limit: 200 }),
+        api.fetchExecutionEvents(accessToken, { limit: 80 }),
         api.fetchUserProfile(accessToken),
         api.fetchDashboardSummary(accessToken),
       ]);
@@ -139,7 +142,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   );
 
   const refreshDashboard = useCallback(async () => {
-    if (!token) return;
+    if (!token || refreshBusy.current) return;
+    refreshBusy.current = true;
     try {
       const dash = await api.fetchDashboardSummary(token);
       setDashboard(dash);
@@ -148,6 +152,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       processNewActivity(dash);
     } catch (e) {
       toast(e instanceof Error ? e.message : "Failed to refresh dashboard", "err");
+    } finally {
+      refreshBusy.current = false;
     }
   }, [token, processNewActivity, toast]);
 
@@ -163,9 +169,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const refreshLogs = useCallback(async () => {
     if (!token) return;
     try {
-      const events = await api.fetchExecutionEvents(token, { limit: 200 });
+      const events = await api.fetchExecutionEvents(token, {
+        limit: 80,
+        date_from: new Date(Date.now() - 86400000).toISOString(),
+      });
       setLogs(events.events.map(executionEventToLogRow));
       setLogsTotal(events.total);
+      setLastUpdatedAt(new Date());
     } catch (e) {
       toast(e instanceof Error ? e.message : "Failed to refresh activity", "err");
     }
@@ -225,12 +235,35 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (paused || !token) return;
-    const id = setInterval(() => {
+
+    const tick = () => {
+      if (document.visibilityState !== "visible") return;
       refreshDashboard();
-      refreshLogs();
-    }, POLL_MS);
-    return () => clearInterval(id);
-  }, [paused, token, refreshDashboard, refreshLogs]);
+      if (pathname !== "/logs") {
+        refreshLogs();
+      }
+    };
+
+    tick();
+    const id = setInterval(tick, DASHBOARD_POLL_MS);
+    const logsId =
+      pathname === "/logs"
+        ? undefined
+        : setInterval(() => {
+            if (document.visibilityState === "visible") refreshLogs();
+          }, CONTEXT_LOGS_POLL_MS);
+
+    const onVis = () => {
+      if (document.visibilityState === "visible") tick();
+    };
+    document.addEventListener("visibilitychange", onVis);
+
+    return () => {
+      clearInterval(id);
+      if (logsId) clearInterval(logsId);
+      document.removeEventListener("visibilitychange", onVis);
+    };
+  }, [paused, token, pathname, refreshDashboard, refreshLogs]);
 
   const signOut = useCallback(async () => {
     await supabase.auth.signOut();

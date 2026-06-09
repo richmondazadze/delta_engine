@@ -51,7 +51,7 @@ export default function SettingsPage() {
       : subscriptionPlan.charAt(0).toUpperCase() + subscriptionPlan.slice(1);
 
   return (
-    <div className="page-inner" style={{ maxWidth: 760 }}>
+    <div className="page-inner" style={{ maxWidth: 880 }}>
       <PageIntro description="Engine, workspace, and plan configuration." />
       <div className="card" style={{ overflow: "hidden", marginBottom: 16 }}>
         <div className="card-head">

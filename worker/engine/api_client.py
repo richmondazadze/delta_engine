@@ -4,6 +4,7 @@ HTTP client for Delta Engine FastAPI control plane (Phase 2).
 
 from __future__ import annotations
 
+import atexit
 import os
 import socket
 import threading
@@ -30,6 +31,17 @@ class ControlApiClient:
         self.worker_id: Optional[str] = None
         self._heartbeat_thread: Optional[threading.Thread] = None
         self._heartbeat_stop = threading.Event()
+        self._http = httpx.Client(
+            timeout=httpx.Timeout(30.0, connect=5.0),
+            limits=httpx.Limits(max_keepalive_connections=16, max_connections=32),
+        )
+        atexit.register(self.close)
+
+    def close(self) -> None:
+        try:
+            self._http.close()
+        except Exception:
+            pass
 
     @property
     def enabled(self) -> bool:
@@ -50,13 +62,12 @@ class ControlApiClient:
         include_user: bool = True,
     ) -> httpx.Response:
         url = f"{self.base_url}{path}"
-        with httpx.Client(timeout=30.0) as client:
-            response = client.request(
-                method,
-                url,
-                headers=self._headers(include_user=include_user),
-                json=json,
-            )
+        response = self._http.request(
+            method,
+            url,
+            headers=self._headers(include_user=include_user),
+            json=json,
+        )
         response.raise_for_status()
         return response
 

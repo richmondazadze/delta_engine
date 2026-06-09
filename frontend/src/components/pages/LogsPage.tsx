@@ -1,13 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { PageIntro } from "@/components/shell/PageIntro";
 import { Icon } from "@/components/icons/Icon";
 import { ForensicDrawer } from "@/components/forensic/ForensicDrawer";
 import { EmptyHint, Seg, StatusBadge, TimingCell } from "@/components/ui";
-import { useApp } from "@/components/shell/AppProvider";
-import { accountDisplayName, fmtClock, fmtInt } from "@/lib/format";
+import { useApp, useAccessToken } from "@/components/shell/AppProvider";
+import { accountDisplayName, executionEventToLogRow, fmtClock, fmtInt } from "@/lib/format";
+import * as api from "@/lib/data";
 import type { LogRow } from "@/lib/types";
 
 const STATUSES = [
@@ -22,6 +23,19 @@ const RANGES = [
   { v: "7d", l: "7 Days" },
   { v: "30d", l: "30 Days" },
 ];
+
+const LOGS_POLL_MS = 5_000;
+const LOGS_FETCH_LIMIT = 300;
+
+function rangeToDateFrom(range: string): string {
+  const ms =
+    range === "24h"
+      ? 86400000
+      : range === "7d"
+        ? 7 * 86400000
+        : 30 * 86400000;
+  return new Date(Date.now() - ms).toISOString();
+}
 
 function LedgerRows({
   rows,
@@ -145,83 +159,122 @@ function MobileLogList({
   const { cpById } = useApp();
 
   return (
-    <div className="log-mobile-list show-mobile-only">
-      {rows.length === 0 ? (
-        <p className="faint" style={{ padding: "8px 4px", fontSize: 13 }}>
-          No entries match your filters.
-        </p>
-      ) : (
-        rows.map((r) => {
-          const cp = cpById(r.copierId);
-          return (
-            <button
-              key={r.id}
-              type="button"
-              className={`log-mobile-card${selId === r.id ? " sel" : ""}`}
-              onClick={() => onRow(r)}
-            >
-              <div className="row spread" style={{ marginBottom: 6 }}>
-                <StatusBadge status={r.status} />
-                <span className="mono faint" style={{ fontSize: 11 }}>
-                  {fmtClock(r.t)}
-                </span>
-              </div>
-              <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 4 }}>{r.eventType}</div>
-              <div className="faint" style={{ fontSize: 12, marginBottom: 6 }}>
-                {cp?.label ?? "Setup"} · {r.symbol}
-                {r.side ? ` · ${r.side}` : ""}
-              </div>
-              <div className="row spread" style={{ fontSize: 12 }}>
-                <span className="mono">{r.lotsExec.toFixed(2)} lots</span>
-                <TimingCell
-                  e2eMs={r.e2eMs ?? r.latency}
-                  orderMs={r.orderMs}
-                  switchMs={r.switchMs}
-                />
-              </div>
-            </button>
-          );
-        })
-      )}
+    <div className="log-mobile-scroll show-mobile-only">
+      <div className="log-mobile-list">
+        {rows.length === 0 ? (
+          <p className="faint" style={{ padding: "8px 4px", fontSize: 13 }}>
+            No entries match your filters.
+          </p>
+        ) : (
+          rows.map((r) => {
+            const cp = cpById(r.copierId);
+            return (
+              <button
+                key={r.id}
+                type="button"
+                className={`log-mobile-card${selId === r.id ? " sel" : ""}`}
+                onClick={() => onRow(r)}
+              >
+                <div className="row spread" style={{ marginBottom: 6 }}>
+                  <StatusBadge status={r.status} />
+                  <span className="mono faint" style={{ fontSize: 11 }}>
+                    {fmtClock(r.t)}
+                  </span>
+                </div>
+                <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 4 }}>{r.eventType}</div>
+                <div className="faint" style={{ fontSize: 12, marginBottom: 6 }}>
+                  {cp?.label ?? "Setup"} · {r.symbol}
+                  {r.side ? ` · ${r.side}` : ""}
+                </div>
+                <div className="row spread" style={{ fontSize: 12 }}>
+                  <span className="mono">{r.lotsExec.toFixed(2)} lots</span>
+                  <TimingCell
+                    e2eMs={r.e2eMs ?? r.latency}
+                    orderMs={r.orderMs}
+                    switchMs={r.switchMs}
+                  />
+                </div>
+              </button>
+            );
+          })
+        )}
+      </div>
     </div>
   );
 }
 
 export default function LogsPage() {
-  const { accounts, logs, logsTotal, cpById } = useApp();
+  const { accounts, paused, cpById } = useApp();
+  const getToken = useAccessToken();
   const searchParams = useSearchParams();
   const copierFilter = searchParams.get("copier") ?? "all";
+
   const [range, setRange] = useState("24h");
   const [statusSel, setStatusSel] = useState(() => new Set(STATUSES.map((s) => s.v)));
   const [sym, setSym] = useState("");
+  const [symDebounced, setSymDebounced] = useState("");
   const [master, setMaster] = useState("all");
   const [sel, setSel] = useState<LogRow | null>(null);
+  const [rows, setRows] = useState<LogRow[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
+  const inFlight = useRef(false);
 
   useEffect(() => {
-    if (copierFilter !== "all" && cpById(copierFilter)) {
-      setStatusSel(new Set(STATUSES.map((s) => s.v)));
-    }
-  }, [copierFilter, cpById]);
+    const t = setTimeout(() => setSymDebounced(sym.trim()), 300);
+    return () => clearTimeout(t);
+  }, [sym]);
 
-  const filtered = useMemo(() => {
-    const cutoff =
-      range === "24h"
-        ? Date.now() - 86400000
-        : range === "7d"
-          ? Date.now() - 7 * 86400000
-          : Date.now() - 30 * 86400000;
-    return logs.filter((r) => {
-      if (r.t.getTime() < cutoff) return false;
-      if (!statusSel.has(r.status)) return false;
-      if (sym && !r.symbol.toLowerCase().includes(sym.toLowerCase())) return false;
-      if (master !== "all") {
-        const cp = cpById(r.copierId);
-        if (!cp || cp.master_account_id !== master) return false;
-      }
-      if (copierFilter !== "all" && r.copierId !== copierFilter) return false;
-      return true;
-    });
-  }, [logs, statusSel, sym, master, range, copierFilter, cpById]);
+  const statusGroupsParam = useMemo(() => {
+    const groups = STATUSES.filter((s) => statusSel.has(s.v)).map((s) => s.v);
+    return groups.length === STATUSES.length ? undefined : groups.join(",");
+  }, [statusSel]);
+
+  const loadLogs = useCallback(async () => {
+    if (inFlight.current) return;
+    inFlight.current = true;
+    try {
+      const token = await getToken();
+      if (!token) return;
+      const res = await api.fetchExecutionEvents(token, {
+        limit: LOGS_FETCH_LIMIT,
+        date_from: rangeToDateFrom(range),
+        copier_relation_id: copierFilter !== "all" ? copierFilter : undefined,
+        master_account_id: master !== "all" ? master : undefined,
+        status_groups: statusGroupsParam,
+        symbol: symDebounced ? symDebounced.toUpperCase() : undefined,
+      });
+      setRows(res.events.map(executionEventToLogRow));
+      setTotal(res.total);
+      setLastUpdatedAt(new Date());
+    } catch {
+      /* keep last good data */
+    } finally {
+      setLoading(false);
+      inFlight.current = false;
+    }
+  }, [getToken, range, copierFilter, master, statusGroupsParam, symDebounced]);
+
+  useEffect(() => {
+    setLoading(true);
+    loadLogs();
+  }, [loadLogs]);
+
+  useEffect(() => {
+    if (paused) return;
+    const onVis = () => {
+      if (document.visibilityState === "visible") loadLogs();
+    };
+    document.addEventListener("visibilitychange", onVis);
+    const id = setInterval(() => {
+      if (document.visibilityState === "visible") loadLogs();
+    }, LOGS_POLL_MS);
+    return () => {
+      document.removeEventListener("visibilitychange", onVis);
+      clearInterval(id);
+    };
+  }, [paused, loadLogs]);
 
   const toggleStatus = (v: string) =>
     setStatusSel((s) => {
@@ -231,16 +284,44 @@ export default function LogsPage() {
       return n;
     });
 
+  const secondsAgo = (d: Date | null) => {
+    if (!d) return "—";
+    const s = Math.max(0, Math.floor((Date.now() - d.getTime()) / 1000));
+    if (s < 60) return `${s}s ago`;
+    return `${Math.floor(s / 60)}m ago`;
+  };
+
+  const copierLabel =
+    copierFilter !== "all" ? cpById(copierFilter)?.label : null;
+
   return (
-    <div className="logs-page-root" style={{ height: "100%", display: "flex", flexDirection: "column" }}>
-      <div className="logs-page-head" style={{ padding: "20px 22px 0", flex: "none" }}>
+    <div className="logs-page-root">
+      <div className="logs-page-head">
         <PageIntro
           style={{ marginBottom: 14 }}
-          description="A running list of trades copied to your accounts. Tap a row for full details."
+          description={
+            copierLabel
+              ? `Filtered to setup “${copierLabel}”. Tap a row for full timing and broker details.`
+              : "A running list of trades copied to your accounts. Tap a row for full details."
+          }
           actions={
-            <span className="badge badge-plain" style={{ fontSize: 12 }}>
-              {fmtInt(filtered.length)} / {fmtInt(logsTotal)} rows
-            </span>
+            <div className="row gap8">
+              <span className="faint" style={{ fontSize: 12 }}>
+                Updated {secondsAgo(lastUpdatedAt)}
+              </span>
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                onClick={() => loadLogs()}
+                disabled={loading}
+              >
+                <Icon name="refresh" size={14} />
+                Refresh
+              </button>
+              <span className="badge badge-plain" style={{ fontSize: 12 }}>
+                {fmtInt(rows.length)} shown · {fmtInt(total)} in range
+              </span>
+            </div>
           }
         />
       </div>
@@ -250,7 +331,7 @@ export default function LogsPage() {
           value={range}
           onChange={setRange}
         />
-        <div style={{ width: 1, height: 24, background: "var(--border)" }} />
+        <div className="lg-toolbar-divider" />
         <div className="row gap6">
           {STATUSES.map((s) => (
             <button
@@ -258,12 +339,6 @@ export default function LogsPage() {
               type="button"
               className={`chk${statusSel.has(s.v) ? " on" : ""}`}
               onClick={() => toggleStatus(s.v)}
-              style={{
-                padding: "4px 9px",
-                border: "1px solid var(--border)",
-                borderRadius: 2,
-                background: statusSel.has(s.v) ? "var(--panel)" : "var(--canvas)",
-              }}
             >
               <span className="box">
                 {statusSel.has(s.v) && <Icon name="check" size={11} />}
@@ -273,7 +348,7 @@ export default function LogsPage() {
           ))}
         </div>
         <div className="grow" />
-        <div className="inp-wrap" style={{ width: 180 }}>
+        <div className="inp-wrap lg-filter-symbol">
           <input
             className="inp mono"
             placeholder="Filter symbol…"
@@ -288,8 +363,7 @@ export default function LogsPage() {
           />
         </div>
         <select
-          className="sel"
-          style={{ width: 200 }}
+          className="sel lg-filter-master"
           value={master}
           onChange={(e) => setMaster(e.target.value)}
         >
@@ -301,16 +375,22 @@ export default function LogsPage() {
           ))}
         </select>
       </div>
-      {accounts.length === 0 ? (
+      {loading && rows.length === 0 ? (
+        <div className="logs-loading faint">Loading copy events…</div>
+      ) : rows.length === 0 && accounts.length === 0 ? (
         <EmptyHint icon="logs" title="No activity yet">
           Link accounts and turn on a copier to see copy events here.
+        </EmptyHint>
+      ) : rows.length === 0 ? (
+        <EmptyHint icon="logs" title="No events in this range">
+          Try widening the time range or clearing filters.
         </EmptyHint>
       ) : (
         <>
           <div className="lg-desktop-only lg-scroll-wrap">
-            <LedgerRows rows={filtered} onRow={setSel} selId={sel?.id} />
+            <LedgerRows rows={rows} onRow={setSel} selId={sel?.id} />
           </div>
-          <MobileLogList rows={filtered} onRow={setSel} selId={sel?.id} />
+          <MobileLogList rows={rows} onRow={setSel} selId={sel?.id} />
         </>
       )}
       {sel && <ForensicDrawer row={sel} onClose={() => setSel(null)} />}

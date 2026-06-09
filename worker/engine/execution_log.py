@@ -75,7 +75,7 @@ def _build_api_payload(event: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     return payload
 
 
-def append_event(event: Dict[str, Any]) -> None:
+def _write_local_jsonl(event: Dict[str, Any]) -> None:
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     row = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -84,7 +84,17 @@ def append_event(event: Dict[str, Any]) -> None:
     with open(LOG_FILE, "a", encoding="utf-8") as f:
         f.write(json.dumps(row, default=str) + "\n")
 
-    if os.environ.get("DELTA_CONFIG_SOURCE", "yaml").lower() != "api":
+
+def append_event(event: Dict[str, Any]) -> None:
+    api_mode = os.environ.get("DELTA_CONFIG_SOURCE", "yaml").lower() == "api"
+    local_log = os.environ.get("WORKER_LOCAL_LOG", "0" if api_mode else "1") == "1"
+    if local_log:
+        try:
+            _write_local_jsonl(event)
+        except Exception as exc:
+            logger.warning("execution_event_local_log_failed", error=str(exc))
+
+    if not api_mode:
         return
 
     try:

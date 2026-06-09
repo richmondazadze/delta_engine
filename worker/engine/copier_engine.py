@@ -45,8 +45,17 @@ class CopierEngine:
         poll_interval_ms: int | None = None,
     ):
         self.poll_interval_ms = poll_interval_ms or int(
-            os.environ.get("WORKER_POLL_INTERVAL_MS", "150")
+            os.environ.get("WORKER_POLL_INTERVAL_MS", "100")
         )
+        self._last_master_status_post: float = 0.0
+        self._master_status_interval_s = float(
+            os.environ.get("WORKER_MASTER_STATUS_INTERVAL_SECONDS", "30")
+        )
+        self._last_command_poll: float = 0.0
+        self._command_poll_interval_s = float(
+            os.environ.get("WORKER_COMMAND_POLL_SECONDS", "2")
+        )
+        self._symbol_mappings_cache: list[dict[str, str]] = []
         self.accounts = load_accounts()
         self.copiers = load_copiers()
         self.symbol_mapper = SymbolMapper(load_symbol_mappings())
@@ -62,6 +71,13 @@ class CopierEngine:
         self._sessions: Dict[str, AccountSession] = {}
         self._terminal_pool = TerminalPool([])
         self._rebuild_sessions()
+        self._rebuild_symbol_mappings_cache()
+
+    def _rebuild_symbol_mappings_cache(self) -> None:
+        self._symbol_mappings_cache = [
+            {"master_symbol": k, "follower_symbol": v}
+            for k, v in self.symbol_mapper._map.items()
+        ]
 
     def _rebuild_sessions(self) -> None:
         self._sessions = {
@@ -96,6 +112,7 @@ class CopierEngine:
             self.accounts = load_accounts()
             self.copiers = load_copiers()
             self.symbol_mapper = SymbolMapper(load_symbol_mappings())
+            self._rebuild_symbol_mappings_cache()
             self._rebuild_sessions()
             if self._api_client:
                 from engine.config_loader import _runtime_payload
@@ -189,7 +206,7 @@ class CopierEngine:
             session = self._sessions.get(master_cfg.id)
             if not session or not self._switch_to(session):
                 return None
-            return master_source.get_open_positions()
+            return session.connector.get_open_positions()
         if not master_source.connect():
             return None
         return master_source.get_open_positions()
@@ -384,8 +401,12 @@ class CopierEngine:
                     )
 
                 if self._api_client:
+                    now = time.time()
                     poll_session = master_session if is_mt5(master_cfg.platform) else None
-                    if poll_session:
+                    if poll_session and (
+                        now - self._last_command_poll >= self._command_poll_interval_s
+                    ):
+                        self._last_command_poll = now
                         self._poll_commands(poll_session)
                     if should_sync_balances():
                         sync_all_balances(self.accounts, self._sessions)
@@ -407,6 +428,10 @@ class CopierEngine:
     def _mark_master_connected(self, master_cfg: AccountConfig) -> None:
         if not self._api_client:
             return
+        now = time.time()
+        if now - self._last_master_status_post < self._master_status_interval_s:
+            return
+        self._last_master_status_post = now
         try:
             self._api_client.post_account_balances(
                 [

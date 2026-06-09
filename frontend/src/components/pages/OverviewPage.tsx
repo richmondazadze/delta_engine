@@ -283,7 +283,7 @@ export default function OverviewPage() {
     <div className="page-inner dash-page">
       <PageIntro
         className="dash-rise"
-        description="Portfolio equity, copy health, and today's execution — refreshed every few seconds."
+        description="Portfolio equity, copy health, and today's execution — refreshes every 5 seconds."
         actions={
           <span className="faint" style={{ fontSize: 12 }}>
             Updated {secondsAgo(lastUpdatedAt)}
