@@ -36,8 +36,8 @@
   --success-tint:#E7F4EC;
   --warning:#B45309;
   --warning-tint:#FBF1E3;
-  --nav-active:#E8F0FE;     /* gemini light tint */
-  --nav-active-fg:#09090B;
+  --nav-active:#E0F2F0;     /* brand teal tint — matches mobile nav */
+  --nav-active-fg:#00695C;
 
   /* radii — subtle softness (minimal, not pill-shaped) */
   --r-button: 6px;
@@ -859,8 +859,8 @@ html, body {
   --faint: oklch(0.62 0 0);
   --muted-fg: oklch(0.72 0 0);
   --border-strong: oklch(0.42 0 0);
-  --nav-active: oklch(0.28 0.04 250);
-  --nav-active-fg: oklch(0.985 0 0);
+  --nav-active: oklch(0.28 0.04 180);
+  --nav-active-fg: oklch(0.88 0.06 180);
   --card: oklch(0.205 0 0);
   --card-foreground: oklch(0.985 0 0);
   --popover: oklch(0.205 0 0);

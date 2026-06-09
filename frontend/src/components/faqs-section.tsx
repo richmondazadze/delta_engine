@@ -41,7 +41,7 @@ export function FaqsSection() {
 				</a>{" "}
 				or visit our{" "}
 				<Link className="font-medium text-[var(--brand)] hover:underline" href="/compare">
-					Compare page
+					Platforms page
 				</Link>
 				.
 			</p>

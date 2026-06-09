@@ -102,9 +102,9 @@ export default function AccountDetailPage({ id }: { id: string }) {
         value={tab}
         onChange={setTab}
         tabs={[
-          { value: "overview", label: "Infrastructure Overview" },
-          { value: "paths", label: "Relation Paths" },
-          { value: "events", label: "Terminal Events" },
+          { value: "overview", label: "Overview" },
+          { value: "paths", label: "Copy paths" },
+          { value: "events", label: "Connection events" },
         ]}
       />
       {tab === "overview" && (

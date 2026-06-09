@@ -5,11 +5,12 @@ import { Logo } from "@/components/logo";
 import { useScroll } from "@/hooks/use-scroll";
 import { Button } from "@/components/ui/button";
 import { MobileNav } from "@/components/mobile-nav";
+import { MarketingNavAuth } from "@/components/marketing/MarketingNavAuth";
 
 export const navLinks = [
 	{ label: "Copier", href: "/copier" },
 	{ label: "Analyzer", href: "/analyzer" },
-	{ label: "Compare", href: "/compare" },
+	{ label: "Platforms", href: "/compare" },
 	{ label: "Pricing", href: "/pricing" },
 ];
 
@@ -45,25 +46,7 @@ export function Header() {
 							{link.label}
 						</Button>
 					))}
-					<div className="ml-3 flex items-center gap-2 border-l pl-4">
-						<Button
-							size="default"
-							variant="outline"
-							className="h-10 px-5"
-							render={<Link href="/login" />}
-							nativeButton={false}
-						>
-							Sign in
-						</Button>
-						<Button
-							size="default"
-							className="h-10 px-5"
-							render={<Link href="/register" />}
-							nativeButton={false}
-						>
-							Get started
-						</Button>
-					</div>
+					<MarketingNavAuth />
 				</div>
 				<MobileNav />
 			</nav>

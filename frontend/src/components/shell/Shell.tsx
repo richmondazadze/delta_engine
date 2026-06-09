@@ -18,6 +18,7 @@ const NAV: { path: string; label: string; icon: IconName }[] = [
 
 const MORE_NAV: { path: string; label: string; icon: IconName }[] = [
   { path: "/analytics", label: "Performance", icon: "gauge" },
+  { path: "/risk", label: "Risk limits", icon: "lock" },
   { path: "/settings", label: "Settings", icon: "settings" },
 ];
 
@@ -29,7 +30,7 @@ export function Sidebar({
   onClose?: () => void;
 }) {
   const pathname = usePathname();
-  const { accounts, subscriptionPlan } = useApp();
+  const { subscriptionPlan } = useApp();
   const active = (p: string) =>
     pathname === p || (p !== "/dashboard" && pathname.startsWith(p));
 
@@ -59,9 +60,6 @@ export function Sidebar({
           >
             <Icon name={n.icon} size={17} />
             {n.label}
-            {n.path === "/logs" && accounts.length > 0 && (
-              <span className="badge-mini">live</span>
-            )}
           </Link>
         ))}
         <div className="sb-sec">More</div>

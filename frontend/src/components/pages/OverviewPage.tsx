@@ -171,7 +171,7 @@ function ZeroState() {
           {
             n: 3,
             t: "Watch it work",
-            d: "See live balances, today's copies, and trade alerts on this page.",
+            d: "See updated balances, today's copies, and trade alerts on this page.",
             icon: "activity" as const,
           },
         ].map((s) => (

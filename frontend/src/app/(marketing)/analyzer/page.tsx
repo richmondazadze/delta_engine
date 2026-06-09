@@ -23,7 +23,7 @@ export default function AnalyzerPage() {
           <Button
             size="lg"
             className="h-12 rounded-sm px-7 text-base"
-            render={<Link href="/register" />}
+            render={<Link href="/pricing" />}
             nativeButton={false}
           >
             {hero.cta}

@@ -139,7 +139,7 @@ export default function RiskPage() {
     <div className="page-inner">
       <div className="page-head">
         <div className="pt">
-          <h1>Risk Engineering</h1>
+          <h1>Risk limits</h1>
           <p className="desc">
             Sentinel guardrails across every terminal. Breaching a limit can auto-lock the node and
             flatten exposure.
@@ -321,7 +321,7 @@ export function RiskDetailPage({ accountId }: { accountId: string }) {
     <div className="page-inner">
       <Link href="/risk" className="link-action" style={{ color: "var(--text-secondary)", marginBottom: 14 }}>
         <Icon name="chevronLeft" size={14} />
-        Risk Engineering
+        Risk limits
       </Link>
       {locked && (
         <div

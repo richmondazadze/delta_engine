@@ -34,7 +34,7 @@ const testimonials: Testimonial[] = [
 	},
 	{
 		quote:
-			"Compare saved us weeks of prop firm research. We picked the right program, mapped symbols once, and had copy paths live the same day.",
+			"We mapped symbols once across MT5 and prop accounts and had copy paths running the same day — without juggling VPS scripts.",
 		image: "https://unavatar.io/x/sama",
 		name: "J. Bennett",
 		role: "Portfolio Manager",

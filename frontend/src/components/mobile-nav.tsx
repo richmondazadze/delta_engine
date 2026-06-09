@@ -4,6 +4,7 @@ import React from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { navLinks } from "@/components/header";
+import { MarketingNavAuth } from "@/components/marketing/MarketingNavAuth";
 import Link from "next/link";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 
@@ -117,21 +118,7 @@ export function MobileNav() {
                   ease: PANEL_EASE,
                 }}
               >
-                <Button
-                  className="h-11 w-full text-base"
-                  variant="outline"
-                  render={<Link href="/login" onClick={closeMenu} />}
-                  nativeButton={false}
-                >
-                  Sign in
-                </Button>
-                <Button
-                  className="h-11 w-full text-base"
-                  render={<Link href="/register" onClick={closeMenu} />}
-                  nativeButton={false}
-                >
-                  Get started
-                </Button>
+                <MarketingNavAuth layout="mobile" onNavigate={closeMenu} />
               </motion.div>
             </motion.nav>
           </>

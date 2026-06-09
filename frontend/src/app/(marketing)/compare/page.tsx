@@ -15,6 +15,10 @@ export default function ComparePage() {
         description={hero.description}
         className="pt-8 md:pt-12"
       >
+        <p className="mk-body mx-auto mb-8 max-w-2xl text-center">
+          Interactive broker and prop-firm comparison is on the roadmap. Below is the
+          current connector status for CopyMorphic Copier.
+        </p>
         <PlatformConnectSection />
       </MarketingSection>
 

@@ -1,34 +1,18 @@
 import { cn } from "@/lib/utils";
 import type React from "react";
-import { GithubIcon } from "@/components/github-icon";
-import { XIcon } from "@/components/x-icon";
 import { FullWidthDivider } from "@/components/full-width-divider";
 import { APP_SUPPORT_EMAIL } from "@/lib/brand";
-import { Mail, MapPin, Phone } from "lucide-react";
-
-const APP_PHONE = "+1 212 555 0142";
+import { Mail } from "lucide-react";
 
 export function Contact() {
-	const socialLinks = [
-		{
-			icon: <GithubIcon className="size-4 text-muted-foreground" />,
-			href: "#",
-			label: "GitHub",
-		},
-		{
-			icon: <XIcon className="size-4 text-muted-foreground" />,
-			href: "#",
-			label: "X",
-		},
-	];
-
 	return (
 		<div className="relative mx-auto min-h-0 max-w-6xl border-x">
-			<div className="grid md:grid-cols-3">
+			<div className="grid md:grid-cols-1">
 				<Box
-					description="We respond to all support emails within one business day."
+					className="border-b-0 md:border-r-0"
+					description="We respond to all support emails within one business day. Enterprise and partnership inquiries welcome."
 					icon={<Mail />}
-					title="Email"
+					title="Email support"
 				>
 					<a
 						className="font-medium font-mono text-base tracking-wide hover:underline"
@@ -37,51 +21,8 @@ export function Contact() {
 						{APP_SUPPORT_EMAIL}
 					</a>
 				</Box>
-				<Box
-					description="Enterprise and partnership inquiries welcome."
-					icon={<MapPin />}
-					title="Office"
-				>
-					<span className="font-medium text-base leading-relaxed tracking-wide">
-						Suite 410, 88 Broad St, New York, NY 10004
-					</span>
-				</Box>
-				<Box
-					className="border-b-0 md:border-r-0"
-					description="Available Mon–Fri, 9am–6pm ET for priority accounts."
-					icon={<Phone />}
-					title="Phone"
-				>
-					<a
-						className="block font-medium font-mono text-base tracking-wide hover:underline"
-						href={`tel:${APP_PHONE}`}
-					>
-						{APP_PHONE}
-					</a>
-				</Box>
 			</div>
 			<FullWidthDivider />
-			<div className="z-1 flex h-full flex-col items-center justify-center gap-5 py-16 md:py-20">
-				<h2 className="text-center text-2xl font-semibold tracking-tight text-muted-foreground md:text-3xl">
-					Find us <span className="text-foreground">online</span>
-				</h2>
-				<div className="flex flex-wrap items-center justify-center gap-3">
-					{socialLinks.map((link) => (
-						<a
-							className="flex items-center gap-x-2 rounded-full border bg-card px-4 py-2 shadow transition-[transform,box-shadow] duration-200 ease-out hover:-translate-y-0.5 hover:bg-accent active:scale-[0.98]"
-							href={link.href}
-							key={link.label}
-							rel="noopener noreferrer"
-							target="_blank"
-						>
-							{link.icon}
-							<span className="font-medium font-mono text-sm tracking-wide">
-								{link.label}
-							</span>
-						</a>
-					))}
-				</div>
-			</div>
 		</div>
 	);
 }

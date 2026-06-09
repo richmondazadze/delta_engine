@@ -216,8 +216,8 @@ function PortfolioSnapshot({ className }: { className?: string }) {
 					</p>
 					<p className="mt-0.5 text-sm font-semibold tracking-tight">3 linked accounts</p>
 				</div>
-				<span className="rounded-sm bg-[var(--brand)]/12 px-2 py-0.5 text-[0.65rem] font-semibold text-[var(--brand)]">
-					LIVE
+				<span className="rounded-sm border border-dashed px-2 py-0.5 text-[0.65rem] font-medium text-muted-foreground">
+					Sample
 				</span>
 			</div>
 

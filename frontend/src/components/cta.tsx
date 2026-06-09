@@ -28,10 +28,10 @@ export function CallToAction() {
 					size="lg"
 					variant="outline"
 					className="h-12 px-7 text-base transition-transform duration-200 ease-out active:scale-[0.97]"
-					render={<Link href="/compare" />}
+					render={<Link href="/compare#contact" />}
 					nativeButton={false}
 				>
-					Contact sales
+					Contact us
 				</Button>
 				<Button
 					size="lg"

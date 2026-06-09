@@ -6,7 +6,7 @@ type Props = {
   compact?: boolean;
 };
 
-/** Branded CopyMorphic dashboard mock — replaces efferd placeholder screenshots. */
+/** Branded CopyMorphic dashboard mock — labels match the live app shell. */
 export function DashboardPreview({ className, compact = false }: Props) {
   return (
     <div
@@ -32,17 +32,24 @@ export function DashboardPreview({ className, compact = false }: Props) {
             className="size-4 opacity-90 md:size-[18px]"
           />
           <span className="font-semibold tracking-tight text-foreground/90">
-            Home
+            Dashboard
           </span>
         </div>
-        <span className="ml-auto rounded-sm bg-[var(--brand)]/15 px-2 py-0.5 text-[0.65rem] font-semibold text-[var(--brand)] md:text-[0.7rem]">
-          LIVE
+        <span className="ml-auto rounded-sm border border-dashed px-2 py-0.5 text-[0.65rem] font-medium text-muted-foreground md:text-[0.7rem]">
+          Preview
         </span>
       </div>
 
       <div className="grid gap-3 p-3 md:grid-cols-[9rem_1fr] md:gap-4 md:p-4 lg:grid-cols-[10rem_1fr]">
         <aside className="hidden space-y-1.5 md:block">
-          {["Home", "Accounts", "Copiers", "Activity", "Settings"].map((item, i) => (
+          {[
+            "Dashboard",
+            "Accounts",
+            "Copy engine",
+            "Copy log",
+            "Performance",
+            "Settings",
+          ].map((item, i) => (
             <div
               key={item}
               className={cn(
@@ -60,10 +67,10 @@ export function DashboardPreview({ className, compact = false }: Props) {
         <div className="space-y-3 md:space-y-4">
           <div className="grid grid-cols-2 gap-2 md:grid-cols-4 md:gap-3">
             {[
-              { label: "Active copiers", value: "12" },
-              { label: "Avg latency", value: "18ms" },
-              { label: "Accounts linked", value: "34" },
-              { label: "Uptime", value: "99.9%" },
+              { label: "Daily P&L", value: "+$842" },
+              { label: "Copies today", value: "24" },
+              { label: "Accounts linked", value: "6" },
+              { label: "Avg latency", value: "—" },
             ].map((stat) => (
               <div
                 key={stat.label}
@@ -83,14 +90,14 @@ export function DashboardPreview({ className, compact = false }: Props) {
             <div className="mb-2 flex items-center justify-between">
               <p className="font-medium text-foreground">Recent copy events</p>
               <span className="text-[0.65rem] text-muted-foreground md:text-[0.7rem]">
-                Last 24h
+                Today
               </span>
             </div>
             <div className="space-y-1.5">
               {[
-                { pair: "EURUSD · Master → Prop-3", status: "Copied", ms: "14ms" },
-                { pair: "XAUUSD · Master → Eval-7", status: "Copied", ms: "19ms" },
-                { pair: "NAS100 · Master → Funded-2", status: "Copied", ms: "16ms" },
+                { pair: "EURUSD · Master → Prop-3", status: "Copied", ms: "—" },
+                { pair: "XAUUSD · Master → Eval-7", status: "Copied", ms: "—" },
+                { pair: "NAS100 · Master → Funded-2", status: "Copied", ms: "—" },
               ].map((row) => (
                 <div
                   key={row.pair}

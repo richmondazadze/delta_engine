@@ -23,7 +23,7 @@ const footerLinks: FooterSection[] = [
 		links: [
 			{ title: "Copier", href: "/copier" },
 			{ title: "Analyzer", href: "/analyzer" },
-			{ title: "Compare", href: "/compare" },
+			{ title: "Platforms", href: "/compare" },
 			{ title: "Pricing", href: "/pricing" },
 		],
 	},
@@ -31,18 +31,8 @@ const footerLinks: FooterSection[] = [
 		label: "About",
 		links: [
 			{ title: "FAQ", href: "/#faq" },
-			{ title: "Affiliates", href: "#" },
-			{ title: "Integrations", href: "/#supported-platforms" },
-			{ title: "Documentation", href: "#" },
-		],
-	},
-	{
-		label: "Resources",
-		links: [
-			{ title: "Developer API", href: "#" },
-			{ title: "Status Page", href: "#" },
-			{ title: "App Store", href: "#" },
-			{ title: "Google Play", href: "#" },
+			{ title: "Supported platforms", href: "/#supported-platforms" },
+			{ title: "Contact", href: "/compare#contact" },
 		],
 	},
 	{
@@ -50,7 +40,6 @@ const footerLinks: FooterSection[] = [
 		links: [
 			{ title: "Terms of Use", href: "/terms" },
 			{ title: "Privacy Policy", href: "/privacy" },
-			{ title: "Billing", href: "/settings/billing" },
 			{ title: "Pricing", href: "/pricing" },
 		],
 	},
@@ -84,7 +73,7 @@ export function Footer() {
 					</p>
 				</AnimatedContainer>
 
-				<div className="grid grid-cols-2 gap-10 md:col-span-2 md:grid-cols-4 md:gap-8">
+				<div className="grid grid-cols-2 gap-10 md:col-span-2 md:grid-cols-3 md:gap-8">
 					{footerLinks.map((section, index) => (
 						<AnimatedContainer delay={0.1 + index * 0.08} key={section.label}>
 							<div>
@@ -100,11 +89,6 @@ export function Footer() {
 											>
 												{link.icon}
 												{link.title}
-												{link.title === "Developer API" ? (
-													<span className="ml-2 text-xs text-muted-foreground">
-														(coming soon)
-													</span>
-												) : null}
 											</Link>
 										</li>
 									))}

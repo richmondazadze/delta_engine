@@ -31,7 +31,7 @@ export function HeroSection() {
 					href="/register"
 				>
 					<div className="rounded-xs border bg-card px-2 py-0.5 shadow-sm">
-						<p className="font-mono text-xs font-semibold text-[var(--brand)]">LIVE</p>
+						<p className="font-mono text-xs font-semibold text-[var(--brand)]">Free tier</p>
 					</div>
 					<span className="text-center text-sm font-medium sm:text-left">{HERO.kicker}</span>
 					<span className="block h-5 border-l" />
