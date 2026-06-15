@@ -396,6 +396,22 @@ def delete_trading_account(account_id: str, user_id: str) -> None:
     logger.info("account_deleted", user_id=user_id, account_id=account_id)
 
 
+WORKER_HEARTBEAT_TTL_SECONDS = 120
+
+
+def _heartbeat_fresh(last_heartbeat_at: Optional[str]) -> bool:
+    if not last_heartbeat_at:
+        return False
+    try:
+        ts = datetime.fromisoformat(str(last_heartbeat_at).replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    if ts.tzinfo is None:
+        ts = ts.replace(tzinfo=timezone.utc)
+    age = (datetime.now(timezone.utc) - ts).total_seconds()
+    return age <= WORKER_HEARTBEAT_TTL_SECONDS
+
+
 def get_worker_health() -> dict[str, Any]:
     sb = get_supabase_admin()
     nodes = (
@@ -405,9 +421,28 @@ def get_worker_health() -> dict[str, Any]:
         .limit(10)
         .execute()
     )
-    online = [n for n in (nodes.data or []) if n.get("status") == "online"]
+    node_rows = nodes.data or []
+
+    # A node is only truly online if its process heartbeat is still fresh.
+    # A crashed worker keeps status="online" but stops beating; treat it offline.
+    online = [
+        n
+        for n in node_rows
+        if n.get("status") == "online" and _heartbeat_fresh(n.get("last_heartbeat_at"))
+    ]
+
+    # Self-heal stale rows so the dashboard reflects reality.
+    for n in node_rows:
+        if n.get("status") == "online" and not _heartbeat_fresh(n.get("last_heartbeat_at")):
+            try:
+                sb.table("worker_nodes").update({"status": "offline"}).eq(
+                    "id", n["id"]
+                ).execute()
+            except Exception:
+                pass
+
     return {
         "online_workers": len(online),
-        "workers": nodes.data or [],
+        "workers": node_rows,
         "healthy": len(online) > 0,
     }

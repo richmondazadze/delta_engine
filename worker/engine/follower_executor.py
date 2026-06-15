@@ -178,6 +178,7 @@ class FollowerExecutor:
             sl=sl or 0.0,
             tp=tp or 0.0,
             magic=magic,
+            comment=f"DE:{signal.ticket}",
         )
         latency_ms = int((time.perf_counter() - t0) * 1000)
 
@@ -229,13 +230,51 @@ class FollowerExecutor:
         )
         return success
 
-    def _copy_close(self, signal: TradeSignal, copier: CopierConfig) -> bool:
+    def _resolve_follower_ticket(
+        self, signal: TradeSignal, copier: CopierConfig
+    ) -> int | str | None:
+        """Find the follower ticket for this master position.
+
+        Falls back to scanning live follower positions tagged with the master
+        ticket (``DE:<ticket>`` comment) so closes/modifies survive a worker
+        restart even when the in-memory map was lost.
+        """
         link = self.ticket_mapper.get(copier.id, signal.ticket)
-        if not link:
+        if link:
+            return link.follower_ticket
+        try:
+            tag = f"DE:{signal.ticket}"
+            for pos in self.follower.connector.get_open_positions():
+                if str(pos.get("comment") or "").strip() == tag:
+                    follower_ticket = int(pos["ticket"])
+                    self.ticket_mapper.add(
+                        copier.id,
+                        signal.ticket,
+                        follower_ticket,
+                        str(pos.get("symbol") or signal.symbol),
+                        signal.side,
+                        follower_account_id=self.follower.account_id,
+                    )
+                    logger.info(
+                        "ticket_link_self_healed",
+                        master_ticket=signal.ticket,
+                        follower_ticket=follower_ticket,
+                    )
+                    return follower_ticket
+        except Exception as exc:
+            logger.warning("ticket_link_self_heal_failed", error=str(exc))
+        return None
+
+    def _copy_close(self, signal: TradeSignal, copier: CopierConfig) -> bool:
+        follower_ticket = self._resolve_follower_ticket(signal, copier)
+        if follower_ticket is None:
+            logger.debug(
+                "copy_close_no_link", copier=copier.id, master_ticket=signal.ticket
+            )
             return True
 
         t0 = time.perf_counter()
-        result = self.follower.connector.close_position(link.follower_ticket)
+        result = self.follower.connector.close_position(follower_ticket)
         latency_ms = int((time.perf_counter() - t0) * 1000)
 
         success = result is not None and result.get("retcode") == mt5.TRADE_RETCODE_DONE
@@ -252,24 +291,35 @@ class FollowerExecutor:
                 "copier_id": copier.id,
                 "event_type": signal.event_type,
                 "master_ticket": signal.ticket,
-                "follower_ticket": link.follower_ticket,
+                "follower_ticket": follower_ticket,
+                "broker_return_code": (
+                    str(result.get("retcode")) if result else None
+                ),
+                "error_message": result.get("comment") if result else "close_failed",
                 **self._timing(latency_ms),
             }
         )
         return success
 
     def _copy_modify(self, signal: TradeSignal, copier: CopierConfig) -> bool:
-        link = self.ticket_mapper.get(copier.id, signal.ticket)
-        if not link:
+        follower_ticket = self._resolve_follower_ticket(signal, copier)
+        if follower_ticket is None:
+            logger.debug(
+                "copy_modify_no_link", copier=copier.id, master_ticket=signal.ticket
+            )
             return True
 
         sl = signal.sl if copier.copy_sl and signal.sl is not None else 0.0
         tp = signal.tp if copier.copy_tp and signal.tp is not None else 0.0
 
         result = self.follower.connector.modify_position(
-            link.follower_ticket, sl=sl or 0.0, tp=tp or 0.0
+            follower_ticket, sl=sl or 0.0, tp=tp or 0.0
         )
-        success = result is not None and result.get("retcode") == mt5.TRADE_RETCODE_DONE
+        # NO_CHANGES means the SL/TP already match (e.g. a paired SL+TP edit
+        # arriving as two signals) — the desired state is in place, so treat it
+        # as success rather than a failure.
+        ok_codes = {mt5.TRADE_RETCODE_DONE, mt5.TRADE_RETCODE_NO_CHANGES}
+        success = result is not None and result.get("retcode") in ok_codes
 
         self._emit(
             {
@@ -277,7 +327,11 @@ class FollowerExecutor:
                 "copier_id": copier.id,
                 "event_type": signal.event_type,
                 "master_ticket": signal.ticket,
-                "follower_ticket": link.follower_ticket,
+                "follower_ticket": follower_ticket,
+                "broker_return_code": (
+                    str(result.get("retcode")) if result else None
+                ),
+                "error_message": result.get("comment") if result else "modify_failed",
                 **self._timing(),
             }
         )

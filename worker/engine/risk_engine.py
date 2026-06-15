@@ -26,6 +26,10 @@ class RiskEngine:
             profiles[row["account_id"]] = row
         return cls(profiles)
 
+    def profile_for(self, account_id: str) -> Optional[dict[str, Any]]:
+        """Serializable risk profile for one account (for cross-process dispatch)."""
+        return self._profiles.get(account_id)
+
     def check_open(
         self,
         follower_account_id: str,

@@ -6,6 +6,7 @@ When DELTA_CONFIG_SOURCE=api, load from FastAPI /internal/runtime-config.
 from __future__ import annotations
 
 import os
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional
@@ -16,6 +17,18 @@ from engine.env_loader import load_worker_env
 
 WORKER_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_CONFIG_DIR = WORKER_ROOT / "config"
+
+# Short-lived cache so a single config reload (which builds accounts, copiers,
+# symbol mappings, and the risk engine) results in ONE HTTP fetch instead of 3-4.
+_PAYLOAD_CACHE_TTL_S = float(os.environ.get("WORKER_RUNTIME_CACHE_SECONDS", "1.0"))
+_payload_cache: dict[str, Any] | None = None
+_payload_cache_at: float = 0.0
+
+
+def invalidate_runtime_cache() -> None:
+    global _payload_cache, _payload_cache_at
+    _payload_cache = None
+    _payload_cache_at = 0.0
 
 
 def get_config_dir() -> Path:
@@ -84,13 +97,21 @@ def _runtime_payload() -> dict[str, Any]:
     from engine.api_client import get_api_client
     from engine.runtime_context import RuntimeContext, get_runtime_context, set_runtime_context
 
+    global _payload_cache, _payload_cache_at
+
     client = get_api_client()
     if not client.enabled:
         raise RuntimeError(
             "DELTA_CONFIG_SOURCE=api requires WORKER_API_KEY and WORKER_USER_ID in .env"
         )
 
+    now = time.monotonic()
+    if _payload_cache is not None and (now - _payload_cache_at) < _PAYLOAD_CACHE_TTL_S:
+        return _payload_cache
+
     payload = client.fetch_runtime_config()
+    _payload_cache = payload
+    _payload_cache_at = now
     copier_accounts = {
         row["id"]: (row["master_id"], row["follower_id"])
         for row in payload.get("copiers", [])

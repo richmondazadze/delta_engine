@@ -109,11 +109,18 @@ def run_isolated_copy_job(job: dict[str, Any]) -> dict[str, Any]:
             follower_account_id=follower["id"],
         )
 
+    risk_engine = None
+    risk_profile = job.get("risk_profile")
+    if risk_profile:
+        from engine.risk_engine import RiskEngine
+
+        risk_engine = RiskEngine({follower["id"]: risk_profile})
+
     executor = FollowerExecutor(
         session,
         symbol_mapper,
         ticket_mapper,
-        risk_engine=None,
+        risk_engine=risk_engine,
         event_sink=sink,
         switch_ms=switch_ms,
         detected_at_ms=job.get("detected_at_ms"),

@@ -102,6 +102,11 @@ def dispatch_to_followers(
     for copier in pool_mt5:
         follower_cfg = get_account(engine.accounts, copier.follower_id)
         link = engine.ticket_mapper.get(copier.id, signal.ticket)
+        risk_profile = (
+            engine.risk_engine.profile_for(follower_cfg.id)
+            if engine.risk_engine
+            else None
+        )
         job = {
             "terminal_path": follower_cfg.terminal_path,
             "follower": _account_dict(follower_cfg),
@@ -110,6 +115,7 @@ def dispatch_to_followers(
             "symbol_mappings": symbol_mappings,
             "detected_at_ms": detected_at_ms,
             "follower_ticket_for_close": link.follower_ticket if link else None,
+            "risk_profile": risk_profile,
         }
         fut = engine._terminal_pool.submit(follower_cfg.terminal_path, job)
         if fut:
@@ -184,7 +190,11 @@ def dispatch_to_followers(
     if dx_pool:
         dx_pool.shutdown(wait=False)
 
-    if master_session and is_mt5(master_cfg.platform):
+    # Only restore the master login if an in-parent follower switch actually
+    # moved the terminal off the master. Pool and DXtrade followers run in
+    # separate processes/connections and never touch the master terminal, so
+    # switching back would be a wasted round-trip that delays the next poll.
+    if fallback_mt5 and master_session and is_mt5(master_cfg.platform):
         engine._switch_to(master_session)
 
     logger.info(

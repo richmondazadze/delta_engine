@@ -155,7 +155,7 @@ class MT5Connector:
         return [p._asdict() for p in positions]
 
     def place_market_order(
-        self, symbol: str, order_type: int, volume: float, sl: float = 0.0, tp: float = 0.0, deviation: int = 10, magic: int = 0
+        self, symbol: str, order_type: int, volume: float, sl: float = 0.0, tp: float = 0.0, deviation: int = 10, magic: int = 0, comment: str = "Delta Engine Copy"
     ) -> Optional[Dict[str, Any]]:
         """
         Place a market order (ORDER_TYPE_BUY or ORDER_TYPE_SELL).
@@ -165,14 +165,26 @@ class MT5Connector:
         if not symbol_info:
             return None
 
+        tick = mt5.symbol_info_tick(symbol)
+        if tick is None:
+            logger.error("mt5_no_tick", symbol=symbol, error=mt5.last_error())
+            return None
+
         # Determine price based on order type
         if order_type == mt5.ORDER_TYPE_BUY:
-            price = mt5.symbol_info_tick(symbol).ask
+            price = tick.ask
         elif order_type == mt5.ORDER_TYPE_SELL:
-            price = mt5.symbol_info_tick(symbol).bid
+            price = tick.bid
         else:
             logger.error("invalid_order_type", order_type=order_type)
             return None
+
+        if not price or price <= 0:
+            logger.error("mt5_invalid_price", symbol=symbol, price=price)
+            return None
+
+        want_sl = float(sl)
+        want_tp = float(tp)
 
         request = {
             "action": mt5.TRADE_ACTION_DEAL,
@@ -180,19 +192,41 @@ class MT5Connector:
             "volume": float(volume),
             "type": order_type,
             "price": price,
-            "sl": float(sl),
-            "tp": float(tp),
+            "sl": want_sl,
+            "tp": want_tp,
             "deviation": deviation,
             "magic": magic,
-            "comment": "Delta Engine Copy",
+            "comment": (comment or "Delta Engine Copy")[:31],
             "type_time": mt5.ORDER_TIME_GTC,
         }
 
         last_result = None
+        stops_stripped = False
         for filling in self._filling_candidates(symbol):
             request["type_filling"] = filling
             result = mt5.order_send(request)
+            if result is None:
+                logger.error("mt5_order_send_none", symbol=symbol, error=mt5.last_error())
+                continue
             last_result = result
+
+            # Market-execution brokers (e.g. Exness) reject SL/TP on the opening
+            # deal. Strip the stops, open clean, then apply them via SLTP below.
+            if (
+                result.retcode == mt5.TRADE_RETCODE_INVALID_STOPS
+                and not stops_stripped
+                and (want_sl or want_tp)
+            ):
+                logger.info("mt5_open_retry_without_stops", symbol=symbol)
+                request["sl"] = 0.0
+                request["tp"] = 0.0
+                stops_stripped = True
+                result = mt5.order_send(request)
+                if result is None:
+                    logger.error("mt5_order_send_none", symbol=symbol, error=mt5.last_error())
+                    continue
+                last_result = result
+
             if result.retcode == mt5.TRADE_RETCODE_DONE:
                 payload = result._asdict()
                 position_ticket = int(
@@ -207,6 +241,12 @@ class MT5Connector:
                             break
                 if position_ticket:
                     payload["position_ticket"] = position_ticket
+                    # Guarantee SL/TP land even when the broker stripped or
+                    # silently ignored them on the opening deal.
+                    if want_sl or want_tp:
+                        self._ensure_position_stops(
+                            position_ticket, symbol, want_sl, want_tp
+                        )
                 logger.info(
                     "mt5_order_send_success",
                     ticket=result.order,
@@ -221,6 +261,40 @@ class MT5Connector:
         logger.error("mt5_order_send_failed", result=last_result._asdict() if last_result else None)
         return last_result._asdict() if last_result else None
 
+    def _ensure_position_stops(
+        self, ticket: int, symbol: str, sl: float, tp: float
+    ) -> None:
+        """Apply SL/TP to a freshly opened position when the broker dropped them."""
+        try:
+            positions = mt5.positions_get(ticket=ticket)
+            if not positions:
+                return
+            pos = positions[0]
+            cur_sl = float(getattr(pos, "sl", 0) or 0)
+            cur_tp = float(getattr(pos, "tp", 0) or 0)
+            need = (sl and abs(cur_sl - sl) > 1e-9) or (tp and abs(cur_tp - tp) > 1e-9)
+            if not need:
+                return
+            res = mt5.order_send(
+                {
+                    "action": mt5.TRADE_ACTION_SLTP,
+                    "position": int(ticket),
+                    "symbol": symbol,
+                    "sl": float(sl),
+                    "tp": float(tp),
+                }
+            )
+            if res is None or res.retcode != mt5.TRADE_RETCODE_DONE:
+                logger.error(
+                    "mt5_open_sltp_apply_failed",
+                    ticket=ticket,
+                    error=(mt5.last_error() if res is None else res._asdict()),
+                )
+            else:
+                logger.info("mt5_open_sltp_applied", ticket=ticket, sl=sl, tp=tp)
+        except Exception as exc:
+            logger.error("mt5_ensure_stops_error", ticket=ticket, error=str(exc))
+
     def close_position(self, ticket: int, deviation: int = 10) -> Optional[Dict[str, Any]]:
         """Close an open position fully."""
         position = mt5.positions_get(ticket=ticket)
@@ -233,13 +307,18 @@ class MT5Connector:
         volume = position.volume
         order_type = position.type
 
+        tick = mt5.symbol_info_tick(symbol)
+        if tick is None:
+            logger.error("mt5_close_no_tick", ticket=ticket, symbol=symbol, error=mt5.last_error())
+            return None
+
         # Opposite type for closing
         if order_type == mt5.ORDER_TYPE_BUY:
             close_type = mt5.ORDER_TYPE_SELL
-            price = mt5.symbol_info_tick(symbol).bid
+            price = tick.bid
         else:
             close_type = mt5.ORDER_TYPE_BUY
-            price = mt5.symbol_info_tick(symbol).ask
+            price = tick.ask
 
         request = {
             "action": mt5.TRADE_ACTION_DEAL,
@@ -256,6 +335,9 @@ class MT5Connector:
         }
 
         result = mt5.order_send(request)
+        if result is None:
+            logger.error("mt5_close_order_send_none", ticket=ticket, error=mt5.last_error())
+            return None
         if result.retcode != mt5.TRADE_RETCODE_DONE:
             logger.error("mt5_close_position_failed", result=result._asdict())
             return result._asdict()
@@ -282,6 +364,9 @@ class MT5Connector:
         }
 
         result = mt5.order_send(request)
+        if result is None:
+            logger.error("mt5_modify_order_send_none", ticket=ticket, error=mt5.last_error())
+            return None
         if result.retcode != mt5.TRADE_RETCODE_DONE:
             logger.error("mt5_modify_position_failed", result=result._asdict())
             return result._asdict()

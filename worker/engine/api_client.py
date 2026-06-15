@@ -79,6 +79,11 @@ class ControlApiClient:
         response = self._request("GET", f"/internal/trading-accounts/{account_id}")
         return response.json()
 
+    def fetch_open_links(self) -> list[dict[str, Any]]:
+        """Reconstructed still-open ticket links so a restart can resume modify/close."""
+        response = self._request("GET", "/internal/open-links")
+        return response.json().get("links", [])
+
     def post_execution_event(self, payload: dict[str, Any]) -> None:
         self._request("POST", "/internal/execution-events", json=payload)
 

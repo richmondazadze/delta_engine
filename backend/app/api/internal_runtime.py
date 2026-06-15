@@ -173,6 +173,70 @@ async def get_runtime_config(
     )
 
 
+@router.get("/open-links")
+async def get_open_links(
+    user_id: str = Header(..., alias="X-User-Id"),
+    _: None = Depends(verify_worker_key),
+):
+    """Reconstruct still-open master→follower ticket links from execution history.
+
+    Lets a restarted worker recover ticket mappings so SL/TP modifications and
+    closes keep working on positions opened in a previous worker session.
+    """
+    sb = get_supabase_admin()
+
+    opened = (
+        sb.table("execution_events")
+        .select(
+            "copier_relation_id,master_account_id,follower_account_id,"
+            "master_ticket,follower_ticket,symbol_follower,side,created_at"
+        )
+        .eq("user_id", user_id)
+        .eq("event_type", "position_opened")
+        .eq("status", "success")
+        .order("created_at", desc=False)
+        .limit(5000)
+        .execute()
+    ).data or []
+
+    closed_rows = (
+        sb.table("execution_events")
+        .select("follower_ticket,status,event_type")
+        .eq("user_id", user_id)
+        .in_("event_type", ["position_closed", "flatten"])
+        .in_("status", ["closed", "success"])
+        .limit(5000)
+        .execute()
+    ).data or []
+
+    closed_follower_tickets = {
+        str(r["follower_ticket"])
+        for r in closed_rows
+        if r.get("follower_ticket")
+    }
+
+    links: dict[str, dict[str, Any]] = {}
+    for row in opened:
+        ft = row.get("follower_ticket")
+        mt = row.get("master_ticket")
+        cr = row.get("copier_relation_id")
+        if not ft or not mt or not cr:
+            continue
+        if str(ft) in closed_follower_tickets:
+            continue
+        # Keyed by copier_relation + master_ticket; later opens overwrite earlier.
+        links[f"{cr}:{mt}"] = {
+            "copier_id": cr,
+            "master_ticket": str(mt),
+            "follower_ticket": str(ft),
+            "follower_account_id": row.get("follower_account_id"),
+            "symbol": row.get("symbol_follower") or "",
+            "side": row.get("side") or "",
+        }
+
+    return {"links": list(links.values())}
+
+
 @router.get("/trading-accounts/{account_id}", response_model=RuntimeAccount)
 async def get_trading_account_for_worker(
     account_id: str,

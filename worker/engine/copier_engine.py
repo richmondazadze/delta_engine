@@ -73,6 +73,45 @@ class CopierEngine:
         self._rebuild_sessions()
         self._rebuild_symbol_mappings_cache()
 
+    def _rebuild_ticket_links_from_history(self) -> None:
+        """Reload still-open master→follower ticket links after a worker restart.
+
+        Without this, modifications and closes on positions opened in a previous
+        session silently no-op because the in-memory ticket map starts empty.
+        """
+        if not self._api_client:
+            return
+        try:
+            links = self._api_client.fetch_open_links()
+        except Exception as exc:
+            logger.warning("ticket_link_rebuild_failed", error=str(exc))
+            return
+        restored = 0
+        for link in links:
+            try:
+                follower_ticket: int | str = int(link["follower_ticket"])
+            except (KeyError, ValueError, TypeError):
+                follower_ticket = link.get("follower_ticket")
+            master_ticket = link.get("master_ticket")
+            copier_id = link.get("copier_id")
+            if not master_ticket or not copier_id or follower_ticket is None:
+                continue
+            try:
+                master_ticket_int = int(master_ticket)
+            except (ValueError, TypeError):
+                continue
+            self.ticket_mapper.add(
+                copier_id,
+                master_ticket_int,
+                follower_ticket,
+                link.get("symbol") or "",
+                link.get("side") or "",
+                follower_account_id=link.get("follower_account_id"),
+            )
+            restored += 1
+        if restored:
+            logger.info("ticket_links_restored", count=restored)
+
     def _rebuild_symbol_mappings_cache(self) -> None:
         self._symbol_mappings_cache = [
             {"master_symbol": k, "follower_symbol": v}
@@ -109,6 +148,9 @@ class CopierEngine:
             return
         self._last_config_reload = time.time()
         try:
+            from engine.config_loader import invalidate_runtime_cache
+
+            invalidate_runtime_cache()
             self.accounts = load_accounts()
             self.copiers = load_copiers()
             self.symbol_mapper = SymbolMapper(load_symbol_mappings())
@@ -206,6 +248,23 @@ class CopierEngine:
             session = self._sessions.get(master_cfg.id)
             if not session or not self._switch_to(session):
                 return None
+            # On a terminal shared with a same-broker follower, verify the login
+            # actually landed on the master before reading — otherwise we'd diff
+            # the follower's positions against the master snapshot.
+            try:
+                import MetaTrader5 as mt5
+
+                info = mt5.account_info()
+                expected = int(session.login) if str(session.login).isdigit() else 0
+                if info is None or (expected and int(info.login) != expected):
+                    logger.warning(
+                        "master_poll_skipped_wrong_login",
+                        expected=expected,
+                        actual=int(info.login) if info else None,
+                    )
+                    return None
+            except ImportError:
+                pass
             return session.connector.get_open_positions()
         if not master_source.connect():
             return None
@@ -222,7 +281,13 @@ class CopierEngine:
             positions = self._read_master_positions(master_session)
             if positions is not None:
                 diff.resync(positions)
-                get_terminal_manager().begin_reconnect_grace(1.5)
+                # Only suppress detection if returning to the master required a
+                # cross-terminal shutdown+initialize (which has a stale-data
+                # settling window). Same-broker fast-login switches read clean
+                # data immediately, so a grace here would silently swallow
+                # SL/TP/volume changes made right after another event.
+                if get_terminal_manager().last_switch_was_cross_terminal():
+                    get_terminal_manager().begin_reconnect_grace(1.5)
         else:
             positions = master_source.get_open_positions()
             if positions is not None:
@@ -279,6 +344,7 @@ class CopierEngine:
             self._api_client.start_heartbeat_loop()
             payload = _runtime_payload()
             self.risk_engine = RiskEngine.from_runtime(payload)
+            self._rebuild_ticket_links_from_history()
 
         if not master_source.connect():
             if self._api_client:
@@ -312,6 +378,12 @@ class CopierEngine:
             if is_mt5(master_cfg.platform)
             else ""
         )
+        # The pool is for followers on a SEPARATE terminal from the master, so
+        # they execute in parallel without disturbing the master connection.
+        # The master's own terminal is driven by this (parent) process; spawning
+        # a pool subprocess for it would fight over the single terminal login.
+        # Same-broker followers (same path, or no path) switch in-parent via a
+        # fast mt5.login() instead.
         pool_paths = sorted(
             {
                 normalize_terminal_path(a.terminal_path)
@@ -319,6 +391,7 @@ class CopierEngine:
                 if a.enabled
                 and is_mt5(a.platform)
                 and a.terminal_path
+                and normalize_terminal_path(a.terminal_path) != master_path
             }
         )
         self._terminal_pool.shutdown()
@@ -327,90 +400,13 @@ class CopierEngine:
 
         try:
             while True:
-                self._maybe_reload_config()
-                master_cfg = next(
-                    (a for a in self.accounts if a.id == master_cfg_id),
-                    master_cfg,
-                )
-                master_session = self._sessions.get(master_cfg_id)
-                master_source = self._master_source_for(master_cfg)
-                if is_mt5(master_cfg.platform) and not master_session:
-                    logger.error("master_session_missing", master=master_cfg_id)
-                    time.sleep(2)
-                    continue
-
-                copier_list = dedupe_copiers_by_follower(
-                    get_copiers_for_master(self.copiers, master_cfg_id)
-                )
-
-                positions = self._poll_master_positions(master_cfg, master_source)
-                if positions is None:
-                    logger.error("master_poll_failed", master=master_cfg_id)
-                    time.sleep(2)
-                    continue
-
-                self._mark_master_connected(master_cfg)
-
-                mgr = get_terminal_manager()
-                if mgr.in_reconnect_grace():
-                    diff.resync(positions)
-                    signals = []
-                else:
-                    signals = diff.diff(positions)
-
-                if signals:
-                    batch_t0 = time.perf_counter()
-                    for signal in signals:
-                        if signal.event_type == "position_opened":
-                            now = time.time()
-                            last = self._recent_open_signals.get(signal.ticket)
-                            if last is not None and (now - last) < 60.0:
-                                logger.info(
-                                    "signal_open_debounced",
-                                    ticket=signal.ticket,
-                                    symbol=signal.symbol,
-                                )
-                                continue
-                            self._recent_open_signals[signal.ticket] = now
-
-                        logger.info(
-                            "signal_detected",
-                            event_type=signal.event_type,
-                            ticket=signal.ticket,
-                            symbol=signal.symbol,
-                        )
-                        dispatch_list = self._copiers_for_signal(
-                            master_cfg_id, copier_list, signal
-                        )
-                        dispatch_to_followers(
-                            self,
-                            signal,
-                            dispatch_list,
-                            master_cfg,
-                            master_session,
-                        )
-
-                    batch_ms = int((time.perf_counter() - batch_t0) * 1000)
-                    logger.info(
-                        "dispatch_batch_complete",
-                        signals=len(signals),
-                        batch_ms=batch_ms,
-                    )
-                    self._resync_after_dispatch(
-                        master_cfg, master_source, diff, master_session
-                    )
-
-                if self._api_client:
-                    now = time.time()
-                    poll_session = master_session if is_mt5(master_cfg.platform) else None
-                    if poll_session and (
-                        now - self._last_command_poll >= self._command_poll_interval_s
-                    ):
-                        self._last_command_poll = now
-                        self._poll_commands(poll_session)
-                    if should_sync_balances():
-                        sync_all_balances(self.accounts, self._sessions)
-
+                try:
+                    self._run_once(master_cfg_id, diff)
+                except KeyboardInterrupt:
+                    raise
+                except Exception as exc:
+                    logger.error("engine_loop_error", error=str(exc), exc_info=True)
+                    time.sleep(1.0)
                 time.sleep(self.poll_interval_ms / 1000.0)
         except KeyboardInterrupt:
             logger.info("copier_engine_stopped")
@@ -424,6 +420,108 @@ class CopierEngine:
                 pass
             get_terminal_manager().release(shutdown=True)
             self._current_session = None
+
+    def _run_once(self, master_cfg_id: str, diff: StateDiffEngine) -> None:
+        master_cfg_fallback = next(
+            (a for a in self.accounts if a.id == master_cfg_id), None
+        )
+        if master_cfg_fallback is None:
+            logger.error("master_account_missing", master=master_cfg_id)
+            time.sleep(2)
+            return
+        self._maybe_reload_config()
+        master_cfg = next(
+            (a for a in self.accounts if a.id == master_cfg_id),
+            master_cfg_fallback,
+        )
+        master_session = self._sessions.get(master_cfg_id)
+        master_source = self._master_source_for(master_cfg)
+        if is_mt5(master_cfg.platform) and not master_session:
+            logger.error("master_session_missing", master=master_cfg_id)
+            time.sleep(2)
+            return
+
+        copier_list = dedupe_copiers_by_follower(
+            get_copiers_for_master(self.copiers, master_cfg_id)
+        )
+
+        positions = self._poll_master_positions(master_cfg, master_source)
+        if positions is None:
+            logger.error("master_poll_failed", master=master_cfg_id)
+            time.sleep(2)
+            return
+
+        self._mark_master_connected(master_cfg)
+
+        mgr = get_terminal_manager()
+        if mgr.in_reconnect_grace():
+            diff.resync(positions)
+            signals = []
+        else:
+            signals = diff.diff(positions)
+
+        if signals:
+            batch_t0 = time.perf_counter()
+            for signal in signals:
+                if signal.event_type == "position_opened":
+                    now = time.time()
+                    last = self._recent_open_signals.get(signal.ticket)
+                    if last is not None and (now - last) < 60.0:
+                        logger.info(
+                            "signal_open_debounced",
+                            ticket=signal.ticket,
+                            symbol=signal.symbol,
+                        )
+                        continue
+                    self._recent_open_signals[signal.ticket] = now
+
+                logger.info(
+                    "signal_detected",
+                    event_type=signal.event_type,
+                    ticket=signal.ticket,
+                    symbol=signal.symbol,
+                )
+                dispatch_list = self._copiers_for_signal(
+                    master_cfg_id, copier_list, signal
+                )
+                try:
+                    dispatch_to_followers(
+                        self,
+                        signal,
+                        dispatch_list,
+                        master_cfg,
+                        master_session,
+                    )
+                except Exception as exc:
+                    logger.error(
+                        "signal_dispatch_failed",
+                        event_type=signal.event_type,
+                        ticket=signal.ticket,
+                        symbol=signal.symbol,
+                        error=str(exc),
+                        exc_info=True,
+                    )
+
+            batch_ms = int((time.perf_counter() - batch_t0) * 1000)
+            logger.info(
+                "dispatch_batch_complete",
+                signals=len(signals),
+                batch_ms=batch_ms,
+            )
+            self._resync_after_dispatch(
+                master_cfg, master_source, diff, master_session
+            )
+
+        if self._api_client:
+            now = time.time()
+            poll_session = master_session if is_mt5(master_cfg.platform) else None
+            if poll_session and (
+                now - self._last_command_poll >= self._command_poll_interval_s
+            ):
+                self._last_command_poll = now
+                self._poll_commands(poll_session)
+            if should_sync_balances():
+                sync_all_balances(self.accounts, self._sessions)
 
     def _mark_master_connected(self, master_cfg: AccountConfig) -> None:
         if not self._api_client:

@@ -104,7 +104,13 @@ class TerminalSessionManager:
         target_server = normalize_server(account.server)
 
         with self._lock:
-            same_terminal = self._attached and self._active_path == target_path
+            # An empty target path means "use whichever terminal is already
+            # running" (common for same-broker followers without an explicit
+            # path). Treat that as the active terminal so we do a fast
+            # mt5.login() switch instead of a costly shutdown + initialize.
+            same_terminal = self._attached and (
+                target_path == "" or self._active_path == target_path
+            )
 
             if same_terminal and self._is_active_login(account.login, target_server):
                 self._last_switch_cross_terminal = False
@@ -115,7 +121,7 @@ class TerminalSessionManager:
                     "mt5_login_switch_same_terminal",
                     from_login=self._active_login,
                     to_login=account.login,
-                    path=target_path or "default",
+                    path=target_path or self._active_path or "default",
                 )
                 if not mt5.login(
                     login=account.login,
