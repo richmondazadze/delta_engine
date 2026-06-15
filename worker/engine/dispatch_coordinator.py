@@ -115,6 +115,9 @@ def dispatch_to_followers(
             "symbol_mappings": symbol_mappings,
             "detected_at_ms": detected_at_ms,
             "follower_ticket_for_close": link.follower_ticket if link else None,
+            "link_symbol": link.symbol if link else None,
+            "link_side": link.side if link else None,
+            "link_volume": link.volume if link else None,
             "risk_profile": risk_profile,
         }
         fut = engine._terminal_pool.submit(follower_cfg.terminal_path, job)

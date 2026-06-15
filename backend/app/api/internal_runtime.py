@@ -189,7 +189,7 @@ async def get_open_links(
         sb.table("execution_events")
         .select(
             "copier_relation_id,master_account_id,follower_account_id,"
-            "master_ticket,follower_ticket,symbol_follower,side,created_at"
+            "master_ticket,follower_ticket,symbol_follower,side,executed_lot,created_at"
         )
         .eq("user_id", user_id)
         .eq("event_type", "position_opened")
@@ -232,6 +232,7 @@ async def get_open_links(
             "follower_account_id": row.get("follower_account_id"),
             "symbol": row.get("symbol_follower") or "",
             "side": row.get("side") or "",
+            "volume": row.get("executed_lot"),
         }
 
     return {"links": list(links.values())}

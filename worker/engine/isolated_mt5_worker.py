@@ -4,6 +4,7 @@ Run a single MT5 copy job in an isolated process (one terminal path per pool wor
 
 from __future__ import annotations
 
+import os
 import time
 from typing import Any
 
@@ -14,23 +15,62 @@ logger = structlog.get_logger()
 _POOL_TERMINAL_PATH: str = ""
 _WARM_ACCOUNT_ID: str = ""
 _WARM_SESSION = None
+_WARM_VERIFIED_AT: float = 0.0
+_WARM_SELECTED_SYMBOLS: set[str] = set()
+
+# A pinned pool worker holds one warm MT5 connection to a single follower
+# account. Re-verifying the login on every job costs an extra account_info()
+# round-trip to a remote broker — wasteful during burst sequences (SL/TP
+# storms, rapid closes). Trust the warm connection for a short window and only
+# re-verify past the TTL, so connection death is still detected promptly.
+_WARM_TTL_S: float = float(os.environ.get("WORKER_POOL_WARM_TTL_SECONDS", "5"))
 
 
 def _init_pool_worker(terminal_path: str) -> None:
-    global _POOL_TERMINAL_PATH, _WARM_ACCOUNT_ID, _WARM_SESSION
+    global _POOL_TERMINAL_PATH, _WARM_ACCOUNT_ID, _WARM_SESSION, _WARM_VERIFIED_AT
     _POOL_TERMINAL_PATH = terminal_path or ""
     _WARM_ACCOUNT_ID = ""
     _WARM_SESSION = None
+    _WARM_VERIFIED_AT = 0.0
+    _WARM_SELECTED_SYMBOLS.clear()
+
+
+def _prewarm_symbols(symbol_mappings: list[dict[str, Any]]) -> None:
+    """Select mapped follower symbols in MarketWatch so ticks stream early.
+
+    First trade on a cold symbol otherwise pays a symbol_select + tick wait.
+    symbol_select is a local terminal call (no broker round-trip), so warming
+    once per process is cheap and removes that stall from the hot path.
+    """
+    try:
+        import MetaTrader5 as mt5
+    except ImportError:
+        return
+    for m in symbol_mappings:
+        sym = (m.get("follower_symbol") or "").strip()
+        if not sym or sym in _WARM_SELECTED_SYMBOLS:
+            continue
+        try:
+            mt5.symbol_select(sym, True)
+        except Exception:
+            pass
+        _WARM_SELECTED_SYMBOLS.add(sym)
 
 
 def _session_for_follower(follower: dict[str, Any], path: str):
-    global _WARM_ACCOUNT_ID, _WARM_SESSION
+    global _WARM_ACCOUNT_ID, _WARM_SESSION, _WARM_VERIFIED_AT
     from engine.account_session import AccountSession
 
     account_id = follower["id"]
+    now = time.perf_counter()
     if _WARM_SESSION is not None and _WARM_ACCOUNT_ID == account_id:
-        _WARM_SESSION.connect()
-        return _WARM_SESSION, 0
+        if (now - _WARM_VERIFIED_AT) < _WARM_TTL_S:
+            # Warm and recently verified — skip the round-trip entirely.
+            return _WARM_SESSION, 0
+        if _WARM_SESSION.connect():
+            _WARM_VERIFIED_AT = time.perf_counter()
+            return _WARM_SESSION, 0
+        # Connection went stale — fall through and rebuild it.
 
     session = AccountSession(
         account_id=account_id,
@@ -47,6 +87,7 @@ def _session_for_follower(follower: dict[str, Any], path: str):
         return None, int((time.perf_counter() - t_switch) * 1000)
     _WARM_SESSION = session
     _WARM_ACCOUNT_ID = account_id
+    _WARM_VERIFIED_AT = time.perf_counter()
     return session, int((time.perf_counter() - t_switch) * 1000)
 
 
@@ -84,6 +125,8 @@ def run_isolated_copy_job(job: dict[str, Any]) -> dict[str, Any]:
             "switch_ms": switch_ms,
         }
 
+    _prewarm_symbols(job.get("symbol_mappings") or [])
+
     signal = _signal_from_job(job)
     copier = CopierConfig(**job["copier"])
     from engine.config_loader import SymbolMapping
@@ -100,13 +143,16 @@ def run_isolated_copy_job(job: dict[str, Any]) -> dict[str, Any]:
 
     ft = job.get("follower_ticket_for_close")
     if ft is not None:
+        # Seed with the FOLLOWER symbol/side/volume (not the master signal's),
+        # so the modify/close fast paths build a valid request for this broker.
         ticket_mapper.add(
             copier.id,
             signal.ticket,
             ft,
-            signal.symbol,
-            signal.side,
+            job.get("link_symbol") or signal.symbol,
+            job.get("link_side") or signal.side,
             follower_account_id=follower["id"],
+            volume=job.get("link_volume"),
         )
 
     risk_engine = None

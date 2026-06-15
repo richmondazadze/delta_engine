@@ -61,6 +61,29 @@ MT5_BROKER_PRESETS: list[MT5BrokerPreset] = [
         verified=True,
     ),
     MT5BrokerPreset(
+        slug="fusion_markets",
+        name="Fusion Markets",
+        default_server="FusionMarkets-Demo",
+        server_examples=(
+            "FusionMarkets-Demo",
+            "FusionMarkets-Live",
+            "FusionMarkets-Live 2",
+            "FusionMarkets-Live 3",
+        ),
+        terminal_path_candidates=(
+            r"C:\Program Files\Fusion Markets MetaTrader 5\terminal64.exe",
+            r"C:\Program Files\Fusion Markets MT5 Terminal\terminal64.exe",
+            r"C:\Program Files\FusionMarkets MetaTrader 5\terminal64.exe",
+        ),
+        path_search_terms=("Fusion Markets", "FusionMarkets", "Fusion"),
+        verified=True,
+        notes=(
+            "Requires the Fusion Markets MetaTrader 5 terminal (terminal64.exe). "
+            "The MetaTrader 4 build is not supported by the copy engine — install "
+            "MT5 from Fusion Markets if you only have MT4."
+        ),
+    ),
+    MT5BrokerPreset(
         slug="generic",
         name="MetaQuotes (generic)",
         default_server="",

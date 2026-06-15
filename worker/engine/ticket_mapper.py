@@ -15,6 +15,7 @@ class TicketLink:
     follower_ticket: int | str
     symbol: str
     side: str
+    volume: float | None = None
 
 
 class TicketMapper:
@@ -39,6 +40,7 @@ class TicketMapper:
         side: str,
         *,
         follower_account_id: str | None = None,
+        volume: float | None = None,
     ) -> None:
         link = TicketLink(
             copier_id=copier_id,
@@ -46,6 +48,7 @@ class TicketMapper:
             follower_ticket=follower_ticket,
             symbol=symbol,
             side=side,
+            volume=volume,
         )
         self._links[(copier_id, master_ticket)] = link
         if follower_account_id:

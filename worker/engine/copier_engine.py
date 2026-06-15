@@ -100,6 +100,11 @@ class CopierEngine:
                 master_ticket_int = int(master_ticket)
             except (ValueError, TypeError):
                 continue
+            raw_volume = link.get("volume")
+            try:
+                volume = float(raw_volume) if raw_volume is not None else None
+            except (ValueError, TypeError):
+                volume = None
             self.ticket_mapper.add(
                 copier_id,
                 master_ticket_int,
@@ -107,6 +112,7 @@ class CopierEngine:
                 link.get("symbol") or "",
                 link.get("side") or "",
                 follower_account_id=link.get("follower_account_id"),
+                volume=volume,
             )
             restored += 1
         if restored:

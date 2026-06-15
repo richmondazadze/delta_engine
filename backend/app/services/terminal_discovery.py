@@ -99,7 +99,11 @@ def list_installed_terminals() -> list[dict[str, str]]:
             continue
         try:
             for exe in root.glob("**/terminal64.exe"):
-                if "MetaTrader" in exe.as_posix() or "MT5" in exe.as_posix() or "FTMO" in exe.as_posix() or "Moneta" in exe.as_posix() or "EXNESS" in exe.as_posix():
+                posix = exe.as_posix()
+                if any(
+                    term in posix
+                    for term in ("MetaTrader", "MT5", "FTMO", "Moneta", "EXNESS", "Fusion")
+                ):
                     results.append(
                         {
                             "path": str(exe),

@@ -295,17 +295,37 @@ class MT5Connector:
         except Exception as exc:
             logger.error("mt5_ensure_stops_error", ticket=ticket, error=str(exc))
 
-    def close_position(self, ticket: int, deviation: int = 10) -> Optional[Dict[str, Any]]:
-        """Close an open position fully."""
-        position = mt5.positions_get(ticket=ticket)
-        if position is None or len(position) == 0:
-            logger.error("mt5_close_position_not_found", ticket=ticket)
-            return None
-        
-        position = position[0]
-        symbol = position.symbol
-        volume = position.volume
-        order_type = position.type
+    def close_position(
+        self,
+        ticket: int,
+        deviation: int = 10,
+        *,
+        symbol: str | None = None,
+        volume: float | None = None,
+        side: str | None = None,
+        magic: int = 0,
+    ) -> Optional[Dict[str, Any]]:
+        """Close an open position fully.
+
+        Fast path: when ``symbol``, ``volume`` and ``side`` are supplied from a
+        cached ticket link we skip the ``positions_get`` round-trip and go
+        straight to the closing tick + order_send.
+        """
+        if symbol and volume and side:
+            order_type = (
+                mt5.ORDER_TYPE_BUY if str(side).lower() == "buy" else mt5.ORDER_TYPE_SELL
+            )
+        else:
+            position = mt5.positions_get(ticket=ticket)
+            if position is None or len(position) == 0:
+                logger.error("mt5_close_position_not_found", ticket=ticket)
+                return None
+
+            position = position[0]
+            symbol = position.symbol
+            volume = position.volume
+            order_type = position.type
+            magic = position.magic
 
         tick = mt5.symbol_info_tick(symbol)
         if tick is None:
@@ -328,7 +348,7 @@ class MT5Connector:
             "position": ticket,
             "price": price,
             "deviation": deviation,
-            "magic": position.magic,
+            "magic": magic,
             "comment": "Delta Engine Close",
             "type_time": mt5.ORDER_TIME_GTC,
             "type_filling": self._resolve_filling_mode(symbol),
@@ -346,19 +366,25 @@ class MT5Connector:
         return result._asdict()
 
     def modify_position(
-        self, ticket: int, sl: float = 0.0, tp: float = 0.0
+        self, ticket: int, sl: float = 0.0, tp: float = 0.0, *, symbol: str | None = None
     ) -> Optional[Dict[str, Any]]:
-        """Modify SL/TP on an open position."""
-        position = mt5.positions_get(ticket=ticket)
-        if position is None or len(position) == 0:
-            logger.error("mt5_modify_position_not_found", ticket=ticket)
-            return None
+        """Modify SL/TP on an open position.
 
-        pos = position[0]
+        Fast path: ``TRADE_ACTION_SLTP`` only needs the position ticket and the
+        symbol, so when the caller passes a cached ``symbol`` we skip the
+        ``positions_get`` round-trip.
+        """
+        if not symbol:
+            position = mt5.positions_get(ticket=ticket)
+            if position is None or len(position) == 0:
+                logger.error("mt5_modify_position_not_found", ticket=ticket)
+                return None
+            symbol = position[0].symbol
+
         request = {
             "action": mt5.TRADE_ACTION_SLTP,
             "position": ticket,
-            "symbol": pos.symbol,
+            "symbol": symbol,
             "sl": float(sl),
             "tp": float(tp),
         }

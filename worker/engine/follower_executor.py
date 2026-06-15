@@ -209,6 +209,7 @@ class FollowerExecutor:
                 follower_symbol,
                 signal.side,
                 follower_account_id=self.follower.account_id,
+                volume=lot,
             )
 
         self._emit(
@@ -254,6 +255,7 @@ class FollowerExecutor:
                         str(pos.get("symbol") or signal.symbol),
                         signal.side,
                         follower_account_id=self.follower.account_id,
+                        volume=float(pos.get("volume") or 0) or None,
                     )
                     logger.info(
                         "ticket_link_self_healed",
@@ -273,8 +275,14 @@ class FollowerExecutor:
             )
             return True
 
+        link = self.ticket_mapper.get(copier.id, signal.ticket)
         t0 = time.perf_counter()
-        result = self.follower.connector.close_position(follower_ticket)
+        result = self.follower.connector.close_position(
+            follower_ticket,
+            symbol=link.symbol if link else None,
+            volume=link.volume if link else None,
+            side=link.side if link else None,
+        )
         latency_ms = int((time.perf_counter() - t0) * 1000)
 
         success = result is not None and result.get("retcode") == mt5.TRADE_RETCODE_DONE
@@ -312,9 +320,15 @@ class FollowerExecutor:
         sl = signal.sl if copier.copy_sl and signal.sl is not None else 0.0
         tp = signal.tp if copier.copy_tp and signal.tp is not None else 0.0
 
+        link = self.ticket_mapper.get(copier.id, signal.ticket)
+        t0 = time.perf_counter()
         result = self.follower.connector.modify_position(
-            follower_ticket, sl=sl or 0.0, tp=tp or 0.0
+            follower_ticket,
+            sl=sl or 0.0,
+            tp=tp or 0.0,
+            symbol=link.symbol if link else None,
         )
+        latency_ms = int((time.perf_counter() - t0) * 1000)
         # NO_CHANGES means the SL/TP already match (e.g. a paired SL+TP edit
         # arriving as two signals) — the desired state is in place, so treat it
         # as success rather than a failure.
@@ -332,7 +346,7 @@ class FollowerExecutor:
                     str(result.get("retcode")) if result else None
                 ),
                 "error_message": result.get("comment") if result else "modify_failed",
-                **self._timing(),
+                **self._timing(latency_ms),
             }
         )
         return success
