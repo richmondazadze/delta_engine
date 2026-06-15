@@ -4,8 +4,10 @@ Build and apply parallel follower dispatch jobs.
 
 from __future__ import annotations
 
+import atexit
+import os
 import time
-from concurrent.futures import Future, ThreadPoolExecutor, as_completed
+from concurrent.futures import Future, ThreadPoolExecutor
 from typing import TYPE_CHECKING, Any
 
 import structlog
@@ -139,12 +141,13 @@ def dispatch_to_followers(
         signal.refresh_timestamp()
         executor.handle(signal, copier)
 
-    dx_futures: list[Future] = []
-    dx_pool: ThreadPoolExecutor | None = None
+    # DXtrade followers run over HTTP in a shared bounded thread pool and never
+    # touch the MT5 terminal; results are applied via callbacks (non-blocking).
     if dxtrade:
-        dx_pool = ThreadPoolExecutor(max_workers=min(4, len(dxtrade)))
+        dx_executor = _get_dx_executor()
         for c in dxtrade:
-            dx_futures.append(dx_pool.submit(_run_dx, c))
+            dx_fut = dx_executor.submit(_run_dx, c)
+            dx_fut.add_done_callback(_make_dx_callback(c))
 
     for copier in fallback_mt5:
         follower_cfg = get_account(engine.accounts, copier.follower_id)
@@ -168,37 +171,20 @@ def dispatch_to_followers(
         )
         executor.handle(signal, copier)
 
-    for copier, fut in futures:
-        try:
-            result = fut.result(timeout=120)
-            _apply_isolated_result(engine, result)
-        except Exception as exc:
-            logger.error("isolated_copy_failed", copier=copier.id, error=str(exc))
-            append_event(
-                {
-                    "status": "failed",
-                    "copier_id": copier.id,
-                    "event_type": signal.event_type,
-                    "master_ticket": signal.ticket,
-                    "error_message": str(exc),
-                    "e2e_ms": max(0, int(time.time() * 1000) - detected_at_ms),
-                }
-            )
-
-    for fut in as_completed(dx_futures):
-        try:
-            fut.result()
-        except Exception as exc:
-            logger.error("dxtrade_copy_failed", error=str(exc))
-    if dx_pool:
-        dx_pool.shutdown(wait=False)
-
-    # Only restore the master login if an in-parent follower switch actually
-    # moved the terminal off the master. Pool and DXtrade followers run in
-    # separate processes/connections and never touch the master terminal, so
-    # switching back would be a wasted round-trip that delays the next poll.
+    # Restore the master login immediately after the in-parent fallback switch
+    # so the next master poll isn't delayed. Pool/DXtrade followers run in
+    # separate processes/connections and never touch the master terminal.
     if fallback_mt5 and master_session and is_mt5(master_cfg.platform):
         engine._switch_to(master_session)
+
+    # Pool results are applied asynchronously via callbacks so a slow
+    # cross-terminal broker never stalls master-change detection. Out-of-order
+    # link application is covered by FollowerExecutor's self-healing resolver,
+    # which scans broker positions by the master-ticket comment tag.
+    for copier, fut in futures:
+        fut.add_done_callback(
+            _make_pool_callback(engine, copier, signal, detected_at_ms)
+        )
 
     logger.info(
         "dispatch_complete",
@@ -209,6 +195,65 @@ def dispatch_to_followers(
         dxtrade=len(dxtrade),
         wall_ms=int((time.perf_counter() - dispatch_t0) * 1000),
     )
+
+
+# Shared, bounded executor for DXtrade (HTTP) follower dispatch. Reused across
+# signals so an SL/TP storm doesn't spawn a fresh pool per event.
+_DX_EXECUTOR: ThreadPoolExecutor | None = None
+
+
+def _get_dx_executor() -> ThreadPoolExecutor:
+    global _DX_EXECUTOR
+    if _DX_EXECUTOR is None:
+        workers = int(os.environ.get("WORKER_DX_DISPATCH_WORKERS", "8"))
+        _DX_EXECUTOR = ThreadPoolExecutor(
+            max_workers=max(1, workers), thread_name_prefix="dx-dispatch"
+        )
+        atexit.register(
+            lambda: _DX_EXECUTOR.shutdown(wait=False) if _DX_EXECUTOR else None
+        )
+    return _DX_EXECUTOR
+
+
+def _make_pool_callback(
+    engine: "CopierEngine",
+    copier: CopierConfig,
+    signal: "TradeSignal",
+    detected_at_ms: int,
+):
+    """Apply an isolated MT5 pool worker's result when its future completes."""
+
+    def _cb(fut: Future) -> None:
+        try:
+            result = fut.result()
+            _apply_isolated_result(engine, result)
+        except Exception as exc:  # noqa: BLE001 - isolate dispatch failures
+            logger.error("isolated_copy_failed", copier=copier.id, error=str(exc))
+            try:
+                append_event(
+                    {
+                        "status": "failed",
+                        "copier_id": copier.id,
+                        "event_type": signal.event_type,
+                        "master_ticket": signal.ticket,
+                        "error_message": str(exc),
+                        "e2e_ms": max(0, int(time.time() * 1000) - detected_at_ms),
+                    }
+                )
+            except Exception:  # noqa: BLE001 - never let logging crash a callback
+                pass
+
+    return _cb
+
+
+def _make_dx_callback(copier: CopierConfig):
+    def _cb(fut: Future) -> None:
+        try:
+            fut.result()
+        except Exception as exc:  # noqa: BLE001 - isolate dispatch failures
+            logger.error("dxtrade_copy_failed", copier=copier.id, error=str(exc))
+
+    return _cb
 
 
 def _apply_isolated_result(engine: "CopierEngine", result: dict[str, Any]) -> None:
@@ -223,6 +268,7 @@ def _apply_isolated_result(engine: "CopierEngine", result: dict[str, Any]) -> No
             link["symbol"],
             link["side"],
             follower_account_id=link.get("follower_account_id"),
+            volume=link.get("volume"),
         )
     rem = result.get("ticket_remove")
     if rem:

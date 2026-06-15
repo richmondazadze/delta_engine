@@ -184,6 +184,7 @@ def run_isolated_copy_job(job: dict[str, Any]) -> dict[str, Any]:
             "symbol": link.symbol,
             "side": link.side,
             "follower_account_id": follower["id"],
+            "volume": link.volume,
         }
     if signal.event_type == "position_closed" and ok:
         ticket_remove = {

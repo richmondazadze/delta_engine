@@ -35,6 +35,15 @@ class SymbolMapper:
         Pick a symbol that exists on the follower terminal.
         Tries explicit mapping, master name, then common suffix variants.
         """
+        # Resolution is stable per (terminal, master_symbol): the follower symbol
+        # that exists doesn't change between signals, so cache it on the warm
+        # connector to skip the candidate-probing symbol_info() calls.
+        resolved_cache = getattr(connector, "_resolved_symbols", None)
+        if resolved_cache is not None:
+            hit = resolved_cache.get(master_symbol)
+            if hit is not None:
+                return hit
+
         mapped = self.map_symbol(master_symbol)
         candidates: list[str] = []
         for sym in (mapped, master_symbol):
@@ -52,5 +61,7 @@ class SymbolMapper:
 
         for sym in candidates:
             if connector.get_symbol_info(sym) is not None:
+                if resolved_cache is not None:
+                    resolved_cache[master_symbol] = sym
                 return sym
         return None

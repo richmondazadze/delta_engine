@@ -556,23 +556,24 @@ class CopierEngine:
         return True
 
     def _read_master_positions(self, master_session: AccountSession) -> List[dict] | None:
-        """Read positions only when the shared terminal is on the master login."""
+        """Read positions only when the shared terminal is on the master login.
+
+        Trust the terminal manager's tracked active login (set during the switch
+        and verified there on the warm path) instead of issuing a second
+        ``account_info()`` round-trip on every poll.
+        """
         if not self._switch_to(master_session):
             return None
-        try:
-            import MetaTrader5 as mt5
-        except ImportError:
-            return master_session.connector.get_open_positions()
-
-        info = mt5.account_info()
         expected = int(master_session.login) if str(master_session.login).isdigit() else 0
-        if info is None or int(info.login) != expected:
-            logger.warning(
-                "master_positions_skipped_wrong_login",
-                expected=expected,
-                actual=int(info.login) if info else None,
-            )
-            return None
+        if expected:
+            active = get_terminal_manager().active_login()
+            if active is not None and int(active) != expected:
+                logger.warning(
+                    "master_positions_skipped_wrong_login",
+                    expected=expected,
+                    actual=int(active),
+                )
+                return None
         return master_session.connector.get_open_positions()
 
     def _dispatch_to_followers(

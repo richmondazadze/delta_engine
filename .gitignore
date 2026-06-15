@@ -101,3 +101,4 @@ ehthumbs.db
 # ---- Optional local overrides (uncomment if you use these) ----
 # .cursor/
 # .agents/
+supabase/migrations/019_execution_events_search_indexes.sql

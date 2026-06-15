@@ -5,6 +5,7 @@ Provides a clean interface for initializing, logging in, fetching state, and exe
 """
 
 import math
+import time
 import structlog
 from typing import Optional, List, Dict, Any, Tuple
 
@@ -24,6 +25,17 @@ class MT5Connector:
         self.server = server
         self.terminal_path = terminal_path
         self.connected = False
+        # Static per-symbol spec cache (digits/volume steps/filling flags). These
+        # do not change intraday, so cache them to avoid a symbol_info() round
+        # trip on every lot-normalize and filling lookup. (TTL guards rare spec
+        # changes / symbol re-selection.)
+        self._symbol_info_cache: Dict[str, Tuple[float, Dict[str, Any]]] = {}
+        self._symbol_info_ttl_s: float = 600.0
+        # Remembered filling mode that last filled per symbol — tried first so a
+        # repeat order skips the reject/retry dance.
+        self._good_filling: Dict[str, int] = {}
+        # Resolved follower symbol per master symbol (filled by SymbolMapper).
+        self._resolved_symbols: Dict[str, str] = {}
 
     def last_error(self) -> Optional[Tuple[int, str]]:
         if mt5 is None:
@@ -87,19 +99,31 @@ class MT5Connector:
         return account_info._asdict()
 
     def get_symbol_info(self, symbol: str) -> Optional[Dict[str, Any]]:
-        """Fetch and select symbol information."""
+        """Fetch and select symbol information (static spec; short-TTL cached).
+
+        Callers use this for existence checks, lot normalization, and filling
+        flags — none read live bid/ask from here (prices come from
+        ``symbol_info_tick``), so a short cache is safe and removes a hot-path
+        round-trip to the terminal on every order.
+        """
+        cached = self._symbol_info_cache.get(symbol)
+        if cached is not None and (time.monotonic() - cached[0]) < self._symbol_info_ttl_s:
+            return cached[1]
+
         symbol_info = mt5.symbol_info(symbol)
         if symbol_info is None:
             logger.error("mt5_symbol_not_found", symbol=symbol)
             return None
-            
+
         # Ensure the symbol is selected in the Market Watch
         if not symbol_info.visible:
             if not mt5.symbol_select(symbol, True):
                 logger.error("mt5_symbol_select_failed", symbol=symbol)
                 return None
-                
-        return symbol_info._asdict()
+
+        info = symbol_info._asdict()
+        self._symbol_info_cache[symbol] = (time.monotonic(), info)
+        return info
 
     def normalize_lot(self, symbol: str, volume: float) -> Optional[float]:
         """Round volume to broker min/max/step."""
@@ -140,7 +164,14 @@ class MT5Connector:
             candidates.append(mt5.ORDER_FILLING_IOC)
         if filling & 4:
             candidates.append(mt5.ORDER_FILLING_RETURN)
-        return candidates or fallback
+        candidates = candidates or fallback
+
+        # Try the mode that last filled this symbol first to skip the
+        # reject/retry loop on repeat orders.
+        good = self._good_filling.get(symbol)
+        if good is not None and good in candidates:
+            candidates = [good] + [c for c in candidates if c != good]
+        return candidates
 
     def _resolve_filling_mode(self, symbol: str) -> int:
         """Pick the first supported order filling mode for the symbol."""
@@ -228,6 +259,7 @@ class MT5Connector:
                 last_result = result
 
             if result.retcode == mt5.TRADE_RETCODE_DONE:
+                self._good_filling[symbol] = filling
                 payload = result._asdict()
                 position_ticket = int(
                     getattr(result, "position", 0)
