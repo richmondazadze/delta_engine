@@ -30,6 +30,16 @@ class RiskEngine:
         """Serializable risk profile for one account (for cross-process dispatch)."""
         return self._profiles.get(account_id)
 
+    def requires_open_count(self, account_id: str) -> bool:
+        """Whether evaluating this account needs a live open-position count.
+
+        Only the ``max_open_positions`` rule consults the count. When it isn't
+        set we can skip the ``get_open_positions()`` round-trip on the open hot
+        path entirely.
+        """
+        profile = self._profiles.get(account_id)
+        return bool(profile and profile.get("max_open_positions") is not None)
+
     def check_open(
         self,
         follower_account_id: str,

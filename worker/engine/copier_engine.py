@@ -189,6 +189,7 @@ class CopierEngine:
             "position_closed",
             "sl_modified",
             "tp_modified",
+            "sltp_modified",
             "volume_changed",
         ):
             return enabled_copiers
@@ -201,7 +202,10 @@ class CopierEngine:
                 continue
             if signal.event_type == "position_closed" and not copier.copy_closes:
                 continue
-            if signal.event_type in ("sl_modified", "tp_modified") and not copier.copy_modifications:
+            if (
+                signal.event_type in ("sl_modified", "tp_modified", "sltp_modified")
+                and not copier.copy_modifications
+            ):
                 continue
             selected[copier.id] = copier
             logger.info(

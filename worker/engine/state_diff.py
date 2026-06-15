@@ -52,7 +52,28 @@ class StateDiffEngine:
                     )
                 )
             else:
-                if snap.sl != prev.sl:
+                sl_changed = snap.sl != prev.sl
+                tp_changed = snap.tp != prev.tp
+                # Coalesce a simultaneous SL+TP edit into ONE signal. Emitting
+                # two signals doubles the cross-terminal work per follower and,
+                # because the pool runs one job at a time per terminal, the
+                # second signal queues behind the first and ages past
+                # max_signal_age_ms — showing up as "Skipped" in the copy log.
+                # A single modify already writes both SL and TP in one call.
+                if sl_changed and tp_changed:
+                    events.append(
+                        TradeSignal(
+                            event_type="sltp_modified",
+                            account_id=self.account_id,
+                            ticket=ticket,
+                            symbol=snap.symbol,
+                            side=snap.side,
+                            volume=snap.volume,
+                            sl=snap.sl or None,
+                            tp=snap.tp or None,
+                        )
+                    )
+                elif sl_changed:
                     events.append(
                         TradeSignal(
                             event_type="sl_modified",
@@ -65,7 +86,7 @@ class StateDiffEngine:
                             tp=snap.tp or None,
                         )
                     )
-                if snap.tp != prev.tp:
+                elif tp_changed:
                     events.append(
                         TradeSignal(
                             event_type="tp_modified",

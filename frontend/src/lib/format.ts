@@ -72,6 +72,9 @@ export function humanEventType(eventType: string | null | undefined): string {
     position_opened: "Copy opened",
     position_closed: "Copy closed",
     modify: "Stop / target changed",
+    sl_modified: "Stop loss changed",
+    tp_modified: "Take profit changed",
+    sltp_modified: "Stop & target changed",
     partial_close: "Partial close",
     balance: "Balance update",
   };

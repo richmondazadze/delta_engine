@@ -52,6 +52,16 @@ def test_detects_sl_modify():
     assert "sl_modified" in types
 
 
+def test_combined_sl_tp_modify_coalesces_to_single_signal():
+    engine = StateDiffEngine("master-1")
+    engine.bootstrap([_pos(1, sl=0, tp=0)])
+    events = engine.diff([_pos(1, sl=1.05, tp=1.20)])
+    assert len(events) == 1
+    assert events[0].event_type == "sltp_modified"
+    assert events[0].sl == 1.05
+    assert events[0].tp == 1.20
+
+
 def test_resync_emits_nothing():
     engine = StateDiffEngine("master-1")
     engine.bootstrap([_pos(1)])

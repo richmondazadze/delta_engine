@@ -49,7 +49,12 @@ class DXtradeFollowerExecutor:
         )
 
     def handle(self, signal: TradeSignal, copier: CopierConfig) -> bool:
-        if signal.age_ms() > copier.max_signal_age_ms:
+        # Staleness guard applies to opens only — closes must always be applied
+        # so the follower never gets stranded with an open position.
+        if (
+            signal.event_type == "position_opened"
+            and signal.age_ms() > copier.max_signal_age_ms
+        ):
             append_event(
                 {
                     "status": "skipped_slippage",

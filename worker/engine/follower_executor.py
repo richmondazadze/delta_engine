@@ -65,7 +65,15 @@ class FollowerExecutor:
             logger.error("mt5_unavailable")
             return False
 
-        if signal.age_ms() > copier.max_signal_age_ms:
+        # The staleness guard only applies to OPENS — a late entry can fill at a
+        # bad price. Closes and modifies must always be applied: skipping a
+        # stale close leaves the follower position open (desync/risk) and
+        # skipping a modify leaves wrong stops. They reflect the latest desired
+        # state at detection and are effectively idempotent, so late is fine.
+        if (
+            signal.event_type == "position_opened"
+            and signal.age_ms() > copier.max_signal_age_ms
+        ):
             self._emit(
                 {
                     "status": "skipped_slippage",
@@ -88,7 +96,10 @@ class FollowerExecutor:
             return self._copy_open(signal, copier)
         if signal.event_type == "position_closed" and copier.copy_closes:
             return self._copy_close(signal, copier)
-        if signal.event_type in ("sl_modified", "tp_modified") and copier.copy_modifications:
+        if (
+            signal.event_type in ("sl_modified", "tp_modified", "sltp_modified")
+            and copier.copy_modifications
+        ):
             return self._copy_modify(signal, copier)
         if signal.event_type == "volume_changed":
             # MVP: full close on volume decrease to zero handled by position_closed
@@ -146,7 +157,13 @@ class FollowerExecutor:
             return False
 
         if self.risk_engine:
-            open_count = len(self.follower.connector.get_open_positions())
+            # Only fetch the live position count when a max_open_positions rule
+            # actually needs it — otherwise skip the terminal round-trip.
+            open_count = (
+                len(self.follower.connector.get_open_positions())
+                if self.risk_engine.requires_open_count(self.follower.account_id)
+                else 0
+            )
             decision = self.risk_engine.check_open(
                 self.follower.account_id,
                 follower_symbol,
