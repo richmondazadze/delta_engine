@@ -20,10 +20,12 @@ _WARM_SELECTED_SYMBOLS: set[str] = set()
 
 # A pinned pool worker holds one warm MT5 connection to a single follower
 # account. Re-verifying the login on every job costs an extra account_info()
-# round-trip to a remote broker — wasteful during burst sequences (SL/TP
-# storms, rapid closes). Trust the warm connection for a short window and only
-# re-verify past the TTL, so connection death is still detected promptly.
-_WARM_TTL_S: float = float(os.environ.get("WORKER_POOL_WARM_TTL_SECONDS", "5"))
+# round-trip to a remote broker — and if the warm connection has gone idle the
+# re-verify escalates to a full reconnect/login (~1.5-2.4s on a remote demo).
+# Trust the warm connection for a window long enough to span the gap between
+# typical edits, so consecutive opens/modifies/closes don't each pay that cost.
+# Tune down if you see stale-session failures; tune up for fewer reconnects.
+_WARM_TTL_S: float = float(os.environ.get("WORKER_POOL_WARM_TTL_SECONDS", "30"))
 
 
 def _init_pool_worker(terminal_path: str) -> None:
