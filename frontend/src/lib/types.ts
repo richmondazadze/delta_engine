@@ -101,6 +101,43 @@ export interface ExecutionEvent {
   created_at: string;
 }
 
+export interface ExecutionSlaMetricStats {
+  count: number;
+  avg: number | null;
+  p50: number | null;
+  p95: number | null;
+  p99: number | null;
+  max: number | null;
+}
+
+export interface ExecutionSlaResponse {
+  as_of: string;
+  window_hours: number;
+  total_events: number;
+  executed: number;
+  failed: number;
+  failure_rate_pct: number;
+  healthy: boolean;
+  breaches: string[];
+  targets: {
+    e2e_p95_ms: number;
+    order_p95_ms: number;
+    switch_p95_ms: number;
+    failure_rate_pct: number;
+  };
+  e2e_ms: ExecutionSlaMetricStats;
+  order_ms: ExecutionSlaMetricStats;
+  switch_ms: ExecutionSlaMetricStats;
+  by_copier: Array<{
+    copier_id: string;
+    e2e: ExecutionSlaMetricStats;
+    order: ExecutionSlaMetricStats;
+    switch: ExecutionSlaMetricStats;
+    executed: number;
+    failed: number;
+  }>;
+}
+
 export interface RiskProfile {
   id: string;
   user_id: string;

@@ -15,7 +15,3 @@ config/symbol_map.yaml
 __pycache__/
 *.py[cod]
 .pytest_cache/
-
-supabase/migrations/*.sql
-
-019_execution_events_search_indexes.sql

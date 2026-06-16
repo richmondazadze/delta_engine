@@ -23,16 +23,16 @@ from engine.config_loader import (
     load_copiers,
     load_symbol_mappings,
 )
-from engine.follower_executor import FollowerExecutor
-from engine.state_diff import StateDiffEngine
-from engine.symbol_mapper import SymbolMapper
-from engine.ticket_mapper import TicketMapper
-from engine.risk_engine import RiskEngine
 from engine.balance_sync import should_sync_balances, sync_all_balances
 from engine.command_processor import process_command
 from engine.dispatch_coordinator import dispatch_to_followers
 from engine.master_source import MasterPositionSource, build_master_source
 from engine.platform_capabilities import is_dxtrade, is_mt5
+from engine.risk_engine import RiskEngine
+from engine.signal_bus import SignalBusReader
+from engine.state_diff import StateDiffEngine
+from engine.symbol_mapper import SymbolMapper
+from engine.ticket_mapper import TicketMapper
 from engine.terminal_pool import TerminalPool
 from engine.terminal_session_manager import get_terminal_manager, normalize_terminal_path
 
@@ -45,8 +45,13 @@ class CopierEngine:
         poll_interval_ms: int | None = None,
     ):
         self.poll_interval_ms = poll_interval_ms or int(
-            os.environ.get("WORKER_POLL_INTERVAL_MS", "100")
+            os.environ.get("WORKER_POLL_INTERVAL_MS", "50")
         )
+        self._poll_fallback_ms = int(
+            os.environ.get("WORKER_POLL_FALLBACK_MS", "1000")
+        )
+        self._signal_bus = None
+        self._last_poll_at: float = 0.0
         self._last_master_status_post: float = 0.0
         self._master_status_interval_s = float(
             os.environ.get("WORKER_MASTER_STATUS_INTERVAL_SECONDS", "30")
@@ -255,27 +260,7 @@ class CopierEngine:
         master_source: MasterPositionSource,
     ) -> List[dict] | None:
         if is_mt5(master_cfg.platform):
-            session = self._sessions.get(master_cfg.id)
-            if not session or not self._switch_to(session):
-                return None
-            # On a terminal shared with a same-broker follower, verify the login
-            # actually landed on the master before reading — otherwise we'd diff
-            # the follower's positions against the master snapshot.
-            try:
-                import MetaTrader5 as mt5
-
-                info = mt5.account_info()
-                expected = int(session.login) if str(session.login).isdigit() else 0
-                if info is None or (expected and int(info.login) != expected):
-                    logger.warning(
-                        "master_poll_skipped_wrong_login",
-                        expected=expected,
-                        actual=int(info.login) if info else None,
-                    )
-                    return None
-            except ImportError:
-                pass
-            return session.connector.get_open_positions()
+            return self._read_master_positions(self._sessions.get(master_cfg.id))
         if not master_source.connect():
             return None
         return master_source.get_open_positions()
@@ -383,30 +368,34 @@ class CopierEngine:
         diff = StateDiffEngine(master_cfg.id)
         diff.bootstrap(master_source.get_open_positions())
 
-        master_path = (
-            normalize_terminal_path(master_cfg.terminal_path)
-            if is_mt5(master_cfg.platform)
-            else ""
-        )
-        # The pool is for followers on a SEPARATE terminal from the master, so
-        # they execute in parallel without disturbing the master connection.
-        # The master's own terminal is driven by this (parent) process; spawning
-        # a pool subprocess for it would fight over the single terminal login.
-        # Same-broker followers (same path, or no path) switch in-parent via a
-        # fast mt5.login() instead.
-        pool_paths = sorted(
-            {
-                normalize_terminal_path(a.terminal_path)
-                for a in self.accounts
-                if a.enabled
-                and is_mt5(a.platform)
-                and a.terminal_path
-                and normalize_terminal_path(a.terminal_path) != master_path
-            }
-        )
+        follower_ids = {c.follower_id for c in copier_list}
+        pool_accounts: dict[str, str] = {}
+        for a in self.accounts:
+            if a.id not in follower_ids or not a.enabled:
+                continue
+            if not is_mt5(a.platform) or not a.terminal_path:
+                continue
+            pool_accounts[a.id] = normalize_terminal_path(a.terminal_path)
         self._terminal_pool.shutdown()
-        self._terminal_pool = TerminalPool(pool_paths)
-        logger.info("terminal_pool_ready", workers=len(pool_paths), paths=pool_paths)
+        self._terminal_pool = TerminalPool(pool_accounts)
+        logger.info(
+            "terminal_pool_ready",
+            workers=len(pool_accounts),
+            accounts=list(pool_accounts.keys()),
+        )
+
+        if is_mt5(master_cfg.platform):
+            bus = SignalBusReader(master_cfg.id, master_cfg.login)
+            self._signal_bus = bus if bus.enabled else None
+            if self._signal_bus:
+                logger.info(
+                    "signal_bus_enabled",
+                    path=str(bus.path),
+                    poll_ms=self.poll_interval_ms,
+                    fallback_ms=self._poll_fallback_ms,
+                )
+        else:
+            self._signal_bus = None
 
         try:
             while True:
@@ -464,11 +453,18 @@ class CopierEngine:
         self._mark_master_connected(master_cfg)
 
         mgr = get_terminal_manager()
-        if mgr.in_reconnect_grace():
-            diff.resync(positions)
-            signals = []
-        else:
-            signals = diff.diff(positions)
+        bus_signals: list = []
+        if self._signal_bus is not None:
+            bus_signals = self._signal_bus.drain()
+
+        poll_signals: list = []
+        if not bus_signals or self._should_poll_fallback():
+            if mgr.in_reconnect_grace():
+                diff.resync(positions)
+            else:
+                poll_signals = diff.diff(positions)
+
+        signals = _merge_signals(bus_signals, poll_signals)
 
         if signals:
             batch_t0 = time.perf_counter()
@@ -533,6 +529,14 @@ class CopierEngine:
             if should_sync_balances():
                 sync_all_balances(self.accounts, self._sessions)
 
+        self._last_poll_at = time.time()
+
+    def _should_poll_fallback(self) -> bool:
+        """When the MQL5 signal bus is active, poll positions less often as a safety net."""
+        if self._signal_bus is None:
+            return True
+        return (time.time() - self._last_poll_at) >= (self._poll_fallback_ms / 1000.0)
+
     def _mark_master_connected(self, master_cfg: AccountConfig) -> None:
         if not self._api_client:
             return
@@ -559,14 +563,16 @@ class CopierEngine:
         self._current_session = target
         return True
 
-    def _read_master_positions(self, master_session: AccountSession) -> List[dict] | None:
+    def _read_master_positions(
+        self, master_session: AccountSession | None
+    ) -> List[dict] | None:
         """Read positions only when the shared terminal is on the master login.
 
         Trust the terminal manager's tracked active login (set during the switch
         and verified there on the warm path) instead of issuing a second
         ``account_info()`` round-trip on every poll.
         """
-        if not self._switch_to(master_session):
+        if not master_session or not self._switch_to(master_session):
             return None
         expected = int(master_session.login) if str(master_session.login).isdigit() else 0
         if expected:
@@ -621,3 +627,17 @@ class CopierEngine:
                 )
         except Exception as exc:
             logger.warning("command_poll_failed", error=str(exc))
+
+
+def _merge_signals(bus_signals: list, poll_signals: list) -> list:
+    """Prefer EA bus events; use poll diff only for tickets not already covered."""
+    if not bus_signals:
+        return poll_signals
+    if not poll_signals:
+        return bus_signals
+    covered = {(s.event_type, s.ticket) for s in bus_signals}
+    merged = list(bus_signals)
+    for sig in poll_signals:
+        if (sig.event_type, sig.ticket) not in covered:
+            merged.append(sig)
+    return merged

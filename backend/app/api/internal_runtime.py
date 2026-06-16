@@ -84,8 +84,11 @@ async def get_runtime_config(
 
     roles = _derive_account_roles(copier_rows)
 
+    from app.services.orchestrator import _prepare_mt5_row
+
     accounts: list[RuntimeAccount] = []
     for row in account_rows:
+        row = _prepare_mt5_row(row)
         accounts.append(
             RuntimeAccount(
                 id=row["id"],

@@ -317,6 +317,10 @@ class FollowerExecutor:
                 "event_type": signal.event_type,
                 "master_ticket": signal.ticket,
                 "follower_ticket": follower_ticket,
+                "symbol_master": signal.symbol,
+                "symbol_follower": link.symbol if link else None,
+                "side": link.side if link else signal.side,
+                "executed_lot": link.volume if link else None,
                 "broker_return_code": (
                     str(result.get("retcode")) if result else None
                 ),
@@ -344,6 +348,7 @@ class FollowerExecutor:
             sl=sl or 0.0,
             tp=tp or 0.0,
             symbol=link.symbol if link else None,
+            side=link.side if link else signal.side,
         )
         latency_ms = int((time.perf_counter() - t0) * 1000)
         # NO_CHANGES means the SL/TP already match (e.g. a paired SL+TP edit

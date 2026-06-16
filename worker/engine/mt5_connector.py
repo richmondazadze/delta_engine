@@ -340,85 +340,220 @@ class MT5Connector:
         """Close an open position fully.
 
         Fast path: when ``symbol``, ``volume`` and ``side`` are supplied from a
-        cached ticket link we skip the ``positions_get`` round-trip and go
-        straight to the closing tick + order_send.
+        cached ticket link we skip the ``positions_get`` round-trip. If the
+        broker rejects the request (wrong filling mode, stale cached volume,
+        etc.) we fall back to a live ``positions_get`` and retry with the same
+        filling-mode loop used for opens.
         """
-        if symbol and volume and side:
-            order_type = (
-                mt5.ORDER_TYPE_BUY if str(side).lower() == "buy" else mt5.ORDER_TYPE_SELL
-            )
-        else:
-            position = mt5.positions_get(ticket=ticket)
-            if position is None or len(position) == 0:
-                logger.error("mt5_close_position_not_found", ticket=ticket)
+        if mt5 is None:
+            return None
+
+        ticket = int(ticket)
+
+        def _send_close(
+            pos_symbol: str,
+            pos_volume: float,
+            position_type: int,
+            pos_magic: int,
+        ) -> Optional[Dict[str, Any]]:
+            tick = mt5.symbol_info_tick(pos_symbol)
+            if tick is None:
+                logger.error(
+                    "mt5_close_no_tick",
+                    ticket=ticket,
+                    symbol=pos_symbol,
+                    error=mt5.last_error(),
+                )
                 return None
 
-            position = position[0]
-            symbol = position.symbol
-            volume = position.volume
-            order_type = position.type
-            magic = position.magic
+            if position_type == mt5.ORDER_TYPE_BUY:
+                close_type = mt5.ORDER_TYPE_SELL
+                price = tick.bid
+            else:
+                close_type = mt5.ORDER_TYPE_BUY
+                price = tick.ask
 
-        tick = mt5.symbol_info_tick(symbol)
-        if tick is None:
-            logger.error("mt5_close_no_tick", ticket=ticket, symbol=symbol, error=mt5.last_error())
+            if not price or price <= 0:
+                logger.error(
+                    "mt5_close_invalid_price",
+                    ticket=ticket,
+                    symbol=pos_symbol,
+                    price=price,
+                )
+                return None
+
+            base_request = {
+                "action": mt5.TRADE_ACTION_DEAL,
+                "symbol": pos_symbol,
+                "volume": float(pos_volume),
+                "type": close_type,
+                "position": ticket,
+                "price": price,
+                "deviation": deviation,
+                "magic": int(pos_magic or 0),
+                "comment": "Delta Engine Close",
+                "type_time": mt5.ORDER_TIME_GTC,
+            }
+
+            last_result = None
+            for filling in self._filling_candidates(pos_symbol):
+                request = {**base_request, "type_filling": filling}
+                result = mt5.order_send(request)
+                if result is None:
+                    logger.error(
+                        "mt5_close_order_send_none",
+                        ticket=ticket,
+                        symbol=pos_symbol,
+                        error=mt5.last_error(),
+                    )
+                    continue
+                last_result = result
+                if result.retcode == mt5.TRADE_RETCODE_DONE:
+                    self._good_filling[pos_symbol] = filling
+                    logger.info(
+                        "mt5_close_position_success",
+                        ticket=ticket,
+                        symbol=pos_symbol,
+                    )
+                    return result._asdict()
+
+            if last_result is not None:
+                logger.error(
+                    "mt5_close_position_failed",
+                    ticket=ticket,
+                    symbol=pos_symbol,
+                    result=last_result._asdict(),
+                )
+                return last_result._asdict()
             return None
 
-        # Opposite type for closing
-        if order_type == mt5.ORDER_TYPE_BUY:
-            close_type = mt5.ORDER_TYPE_SELL
-            price = tick.bid
-        else:
-            close_type = mt5.ORDER_TYPE_BUY
-            price = tick.ask
+        # Fast path from cached ticket link (skip positions_get).
+        if symbol and volume and side:
+            position_type = (
+                mt5.ORDER_TYPE_BUY
+                if str(side).lower() == "buy"
+                else mt5.ORDER_TYPE_SELL
+            )
+            result = _send_close(symbol, float(volume), position_type, magic)
+            if result is not None and result.get("retcode") == mt5.TRADE_RETCODE_DONE:
+                return result
+            logger.info(
+                "mt5_close_fast_path_retry_positions_get",
+                ticket=ticket,
+                symbol=symbol,
+                retcode=result.get("retcode") if result else None,
+            )
 
-        request = {
-            "action": mt5.TRADE_ACTION_DEAL,
-            "symbol": symbol,
-            "volume": volume,
-            "type": close_type,
-            "position": ticket,
-            "price": price,
-            "deviation": deviation,
-            "magic": magic,
-            "comment": "Delta Engine Close",
-            "type_time": mt5.ORDER_TIME_GTC,
-            "type_filling": self._resolve_filling_mode(symbol),
-        }
+        position = mt5.positions_get(ticket=ticket)
+        if position is None or len(position) == 0:
+            logger.error("mt5_close_position_not_found", ticket=ticket)
+            return result if symbol and volume and side else None
 
-        result = mt5.order_send(request)
-        if result is None:
-            logger.error("mt5_close_order_send_none", ticket=ticket, error=mt5.last_error())
-            return None
-        if result.retcode != mt5.TRADE_RETCODE_DONE:
-            logger.error("mt5_close_position_failed", result=result._asdict())
-            return result._asdict()
+        pos = position[0]
+        return _send_close(
+            pos.symbol,
+            float(pos.volume),
+            int(pos.type),
+            int(getattr(pos, "magic", 0) or 0),
+        )
 
-        logger.info("mt5_close_position_success", ticket=ticket, symbol=symbol)
-        return result._asdict()
+    def _clamp_stops_for_side(
+        self,
+        symbol: str,
+        side: str,
+        sl: float,
+        tp: float,
+        *,
+        bid: float,
+        ask: float,
+    ) -> tuple[float, float]:
+        """Clamp SL/TP to broker minimum stop distance to avoid rc=10016."""
+        info = self.get_symbol_info(symbol)
+        if not info:
+            return sl, tp
+
+        point = float(info.get("point", 0) or 0)
+        if point <= 0:
+            return sl, tp
+
+        stops_level = int(info.get("trade_stops_level", 0) or 0)
+        min_dist = stops_level * point
+        digits = int(info.get("digits", 5) or 5)
+        is_buy = str(side).lower() == "buy"
+
+        out_sl = float(sl or 0)
+        out_tp = float(tp or 0)
+
+        if out_sl > 0 and min_dist > 0:
+            if is_buy:
+                max_sl = bid - min_dist
+                if out_sl > max_sl:
+                    out_sl = max_sl
+            else:
+                min_sl = ask + min_dist
+                if out_sl < min_sl:
+                    out_sl = min_sl
+            out_sl = round(out_sl, digits)
+
+        if out_tp > 0 and min_dist > 0:
+            if is_buy:
+                min_tp = ask + min_dist
+                if out_tp < min_tp:
+                    out_tp = min_tp
+            else:
+                max_tp = bid - min_dist
+                if out_tp > max_tp:
+                    out_tp = max_tp
+            out_tp = round(out_tp, digits)
+
+        return out_sl, out_tp
 
     def modify_position(
-        self, ticket: int, sl: float = 0.0, tp: float = 0.0, *, symbol: str | None = None
+        self,
+        ticket: int,
+        sl: float = 0.0,
+        tp: float = 0.0,
+        *,
+        symbol: str | None = None,
+        side: str | None = None,
     ) -> Optional[Dict[str, Any]]:
         """Modify SL/TP on an open position.
 
         Fast path: ``TRADE_ACTION_SLTP`` only needs the position ticket and the
         symbol, so when the caller passes a cached ``symbol`` we skip the
-        ``positions_get`` round-trip.
+        ``positions_get`` round-trip. Stops are clamped to broker min distance.
         """
-        if not symbol:
+        position_type = None
+        if not symbol or side is None:
             position = mt5.positions_get(ticket=ticket)
             if position is None or len(position) == 0:
                 logger.error("mt5_modify_position_not_found", ticket=ticket)
                 return None
-            symbol = position[0].symbol
+            pos = position[0]
+            symbol = symbol or pos.symbol
+            position_type = int(pos.type)
+            side = "buy" if position_type == mt5.ORDER_TYPE_BUY else "sell"
+
+        tick = mt5.symbol_info_tick(symbol)
+        if tick is None:
+            logger.error("mt5_modify_no_tick", ticket=ticket, symbol=symbol)
+            return None
+
+        clamped_sl, clamped_tp = self._clamp_stops_for_side(
+            symbol,
+            side or "buy",
+            sl,
+            tp,
+            bid=float(tick.bid),
+            ask=float(tick.ask),
+        )
 
         request = {
             "action": mt5.TRADE_ACTION_SLTP,
-            "position": ticket,
+            "position": int(ticket),
             "symbol": symbol,
-            "sl": float(sl),
-            "tp": float(tp),
+            "sl": clamped_sl,
+            "tp": clamped_tp,
         }
 
         result = mt5.order_send(request)
@@ -429,5 +564,10 @@ class MT5Connector:
             logger.error("mt5_modify_position_failed", result=result._asdict())
             return result._asdict()
 
-        logger.info("mt5_modify_position_success", ticket=ticket, sl=sl, tp=tp)
+        logger.info(
+            "mt5_modify_position_success",
+            ticket=ticket,
+            sl=clamped_sl,
+            tp=clamped_tp,
+        )
         return result._asdict()

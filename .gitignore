@@ -101,4 +101,6 @@ ehthumbs.db
 # ---- Optional local overrides (uncomment if you use these) ----
 # .cursor/
 # .agents/
+
+# Applied manually — do not commit (user runs in Supabase dashboard)
 supabase/migrations/019_execution_events_search_indexes.sql

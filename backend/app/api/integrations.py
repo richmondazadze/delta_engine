@@ -39,6 +39,8 @@ class MT5BrokerResponse(BaseModel):
     terminal_installed: bool = False
     verified: bool
     notes: str | None = None
+    recommended_vps_regions: list[str] = []
+    latency_notes: str | None = None
 
 
 class MT5BrokersListResponse(BaseModel):
@@ -105,6 +107,8 @@ async def list_mt5_brokers():
                 terminal_installed=bool(path and Path(path).is_file()),
                 verified=b.verified,
                 notes=b.notes,
+                recommended_vps_regions=list(b.recommended_vps_regions),
+                latency_notes=b.latency_notes,
             )
         )
     return MT5BrokersListResponse(brokers=brokers, installed_terminals=installed)

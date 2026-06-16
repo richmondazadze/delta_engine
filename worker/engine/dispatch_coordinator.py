@@ -1,5 +1,9 @@
 """
 Build and apply parallel follower dispatch jobs.
+
+Every MT5 follower runs in its own warm pool subprocess (keyed by account id).
+There is no inline serial login fallback — that path blocked the master poll loop
+and added ~2s per same-terminal follower.
 """
 
 from __future__ import annotations
@@ -12,7 +16,6 @@ import structlog
 
 from engine.config_loader import AccountConfig, CopierConfig, get_account
 from engine.execution_log import append_event
-from engine.follower_executor import FollowerExecutor
 from engine.platform_capabilities import is_dxtrade, is_mt5
 from engine.terminal_session_manager import normalize_terminal_path
 
@@ -81,7 +84,6 @@ def dispatch_to_followers(
     dispatch_t0 = time.perf_counter()
 
     pool_mt5: list[CopierConfig] = []
-    fallback_mt5: list[CopierConfig] = []
     dxtrade: list[CopierConfig] = []
 
     for copier in engine._sort_copiers_for_dispatch(copier_list, master_cfg):
@@ -91,10 +93,24 @@ def dispatch_to_followers(
             continue
         if not is_mt5(follower_cfg.platform):
             continue
-        if engine._terminal_pool.has(follower_cfg.terminal_path):
-            pool_mt5.append(copier)
-        else:
-            fallback_mt5.append(copier)
+        if not follower_cfg.terminal_path:
+            logger.error(
+                "follower_missing_terminal_path",
+                follower=follower_cfg.id,
+                copier=copier.id,
+            )
+            append_event(
+                {
+                    "status": "failed",
+                    "copier_id": copier.id,
+                    "event_type": signal.event_type,
+                    "master_ticket": signal.ticket,
+                    "error_message": "follower_terminal_path_missing",
+                    "e2e_ms": 0,
+                }
+            )
+            continue
+        pool_mt5.append(copier)
 
     symbol_mappings = engine._symbol_mappings_cache
 
@@ -107,24 +123,40 @@ def dispatch_to_followers(
             if engine.risk_engine
             else None
         )
+        submitted_at_ms = int(time.time() * 1000)
         job = {
-            "terminal_path": follower_cfg.terminal_path,
+            "terminal_path": normalize_terminal_path(follower_cfg.terminal_path),
             "follower": _account_dict(follower_cfg),
             "copier": _copier_dict(copier),
             "signal": _signal_dict(signal, master_cfg.id),
             "symbol_mappings": symbol_mappings,
             "detected_at_ms": detected_at_ms,
+            "submitted_at_ms": submitted_at_ms,
             "follower_ticket_for_close": link.follower_ticket if link else None,
             "link_symbol": link.symbol if link else None,
             "link_side": link.side if link else None,
             "link_volume": link.volume if link else None,
             "risk_profile": risk_profile,
         }
-        fut = engine._terminal_pool.submit(follower_cfg.terminal_path, job)
+        fut = engine._terminal_pool.submit(follower_cfg.id, job)
         if fut:
             futures.append((copier, fut))
         else:
-            fallback_mt5.append(copier)
+            logger.error(
+                "pool_submit_failed",
+                follower=follower_cfg.id,
+                copier=copier.id,
+            )
+            append_event(
+                {
+                    "status": "failed",
+                    "copier_id": copier.id,
+                    "event_type": signal.event_type,
+                    "master_ticket": signal.ticket,
+                    "error_message": "pool_worker_unavailable",
+                    "e2e_ms": max(0, int(time.time() * 1000) - detected_at_ms),
+                }
+            )
 
     def _run_dx(copier: CopierConfig) -> None:
         from engine.dxtrade_follower_executor import DXtradeFollowerExecutor
@@ -146,35 +178,7 @@ def dispatch_to_followers(
         for c in dxtrade:
             dx_futures.append(dx_pool.submit(_run_dx, c))
 
-    for copier in fallback_mt5:
-        follower_cfg = get_account(engine.accounts, copier.follower_id)
-        follower_session = engine._sessions.get(follower_cfg.id)
-        if not follower_session:
-            logger.error("follower_session_missing", follower=follower_cfg.id)
-            continue
-        t_sw = time.perf_counter()
-        if not engine._switch_to(follower_session):
-            logger.error("follower_login_failed", follower=follower_cfg.id, copier=copier.id)
-            continue
-        switch_ms = int((time.perf_counter() - t_sw) * 1000)
-        signal.refresh_timestamp()
-        executor = FollowerExecutor(
-            follower_session,
-            engine.symbol_mapper,
-            engine.ticket_mapper,
-            risk_engine=engine.risk_engine,
-            switch_ms=switch_ms,
-            detected_at_ms=detected_at_ms,
-        )
-        executor.handle(signal, copier)
-
-    # Wait for the parallel pool followers and apply their results before
-    # returning. This blocking wait is intentional backpressure: while dispatch
-    # is in flight the master isn't re-polled, so a burst of rapid edits (e.g.
-    # dragging SL/TP) collapses into a single coalesced signal at the next poll
-    # instead of flooding the single-worker-per-terminal pools with a backlog.
-    # Timing data showed each order itself is ~40ms, but without this wait the
-    # queue backlog inflated end-to-end latency to several seconds.
+    # Blocking wait is intentional backpressure — prevents SL/TP storm backlog.
     for copier, fut in futures:
         try:
             result = fut.result(timeout=120)
@@ -200,17 +204,11 @@ def dispatch_to_followers(
     if dx_pool:
         dx_pool.shutdown(wait=False)
 
-    # Restore the master login after the in-parent fallback switch so the next
-    # poll reads the master. Pool/DXtrade followers use separate connections.
-    if fallback_mt5 and master_session and is_mt5(master_cfg.platform):
-        engine._switch_to(master_session)
-
     logger.info(
         "dispatch_complete",
         event_type=signal.event_type,
         ticket=signal.ticket,
         pool=len(pool_mt5),
-        fallback=len(fallback_mt5),
         dxtrade=len(dxtrade),
         wall_ms=int((time.perf_counter() - dispatch_t0) * 1000),
     )
@@ -237,4 +235,3 @@ def _apply_isolated_result(engine: "CopierEngine", result: dict[str, Any]) -> No
             int(rem["master_ticket"]),
             follower_account_id=rem.get("follower_account_id"),
         )
-

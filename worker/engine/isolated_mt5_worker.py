@@ -12,29 +12,32 @@ import structlog
 
 logger = structlog.get_logger()
 
+_POOL_ACCOUNT_ID: str = ""
 _POOL_TERMINAL_PATH: str = ""
-_WARM_ACCOUNT_ID: str = ""
 _WARM_SESSION = None
 _WARM_VERIFIED_AT: float = 0.0
 _WARM_SELECTED_SYMBOLS: set[str] = set()
 
-# A pinned pool worker holds one warm MT5 connection to a single follower
-# account. Re-verifying the login on every job costs an extra account_info()
-# round-trip to a remote broker — and if the warm connection has gone idle the
-# re-verify escalates to a full reconnect/login (~1.5-2.4s on a remote demo).
-# Trust the warm connection for a window long enough to span the gap between
-# typical edits, so consecutive opens/modifies/closes don't each pay that cost.
-# Tune down if you see stale-session failures; tune up for fewer reconnects.
-_WARM_TTL_S: float = float(os.environ.get("WORKER_POOL_WARM_TTL_SECONDS", "30"))
+# Trust warm connections until an order fails — skip the account_info() probe that
+# costs a remote round-trip on every job after the TTL window.
+_WARM_TTL_S: float = float(os.environ.get("WORKER_POOL_WARM_TTL_SECONDS", "60"))
+_OPTIMISTIC_WARM: bool = os.environ.get("WORKER_POOL_OPTIMISTIC_WARM", "1") == "1"
 
 
-def _init_pool_worker(terminal_path: str) -> None:
-    global _POOL_TERMINAL_PATH, _WARM_ACCOUNT_ID, _WARM_SESSION, _WARM_VERIFIED_AT
+def _init_pool_worker(account_id: str, terminal_path: str) -> None:
+    global _POOL_ACCOUNT_ID, _POOL_TERMINAL_PATH, _WARM_SESSION, _WARM_VERIFIED_AT
+    _POOL_ACCOUNT_ID = account_id or ""
     _POOL_TERMINAL_PATH = terminal_path or ""
-    _WARM_ACCOUNT_ID = ""
     _WARM_SESSION = None
     _WARM_VERIFIED_AT = 0.0
     _WARM_SELECTED_SYMBOLS.clear()
+
+
+def invalidate_warm_session() -> None:
+    """Drop the pinned warm session so the next job reconnects."""
+    global _WARM_SESSION, _WARM_VERIFIED_AT
+    _WARM_SESSION = None
+    _WARM_VERIFIED_AT = 0.0
 
 
 def _prewarm_symbols(symbol_mappings: list[dict[str, Any]]) -> None:
@@ -60,19 +63,22 @@ def _prewarm_symbols(symbol_mappings: list[dict[str, Any]]) -> None:
 
 
 def _session_for_follower(follower: dict[str, Any], path: str):
-    global _WARM_ACCOUNT_ID, _WARM_SESSION, _WARM_VERIFIED_AT
+    global _POOL_ACCOUNT_ID, _WARM_SESSION, _WARM_VERIFIED_AT
     from engine.account_session import AccountSession
 
     account_id = follower["id"]
     now = time.perf_counter()
-    if _WARM_SESSION is not None and _WARM_ACCOUNT_ID == account_id:
+
+    if _WARM_SESSION is not None and _POOL_ACCOUNT_ID == account_id:
+        if _OPTIMISTIC_WARM:
+            # Optimistic warm path — send immediately; invalidate only on failure.
+            return _WARM_SESSION, 0
         if (now - _WARM_VERIFIED_AT) < _WARM_TTL_S:
-            # Warm and recently verified — skip the round-trip entirely.
             return _WARM_SESSION, 0
         if _WARM_SESSION.connect():
             _WARM_VERIFIED_AT = time.perf_counter()
             return _WARM_SESSION, 0
-        # Connection went stale — fall through and rebuild it.
+        invalidate_warm_session()
 
     session = AccountSession(
         account_id=account_id,
@@ -88,7 +94,7 @@ def _session_for_follower(follower: dict[str, Any], path: str):
     if not session.connect():
         return None, int((time.perf_counter() - t_switch) * 1000)
     _WARM_SESSION = session
-    _WARM_ACCOUNT_ID = account_id
+    _POOL_ACCOUNT_ID = account_id
     _WARM_VERIFIED_AT = time.perf_counter()
     return session, int((time.perf_counter() - t_switch) * 1000)
 
@@ -112,6 +118,7 @@ def run_isolated_copy_job(job: dict[str, Any]) -> dict[str, Any]:
 
     session, switch_ms = _session_for_follower(follower, path)
     if session is None:
+        invalidate_warm_session()
         return {
             "ok": False,
             "events": [
@@ -171,9 +178,12 @@ def run_isolated_copy_job(job: dict[str, Any]) -> dict[str, Any]:
         risk_engine=risk_engine,
         event_sink=sink,
         switch_ms=switch_ms,
-        detected_at_ms=job.get("detected_at_ms"),
+        detected_at_ms=job.get("submitted_at_ms") or job.get("detected_at_ms"),
     )
     ok = executor.handle(signal, copier)
+
+    if not ok and _OPTIMISTIC_WARM:
+        invalidate_warm_session()
 
     ticket_link = None
     ticket_remove = None
@@ -209,10 +219,19 @@ def run_isolated_copy_job(job: dict[str, Any]) -> dict[str, Any]:
 
 
 def _e2e(job: dict[str, Any]) -> int:
+    """End-to-end latency from signal detection to result (ms).
+
+    Prefer per-follower ``submitted_at_ms`` when present so pool followers are
+    not penalized for waiting on slower siblings in the dispatch barrier.
+    """
+    now_ms = int(time.time() * 1000)
+    submitted = job.get("submitted_at_ms")
+    if submitted:
+        return max(0, now_ms - int(submitted))
     detected = job.get("detected_at_ms") or 0
     if not detected:
         return 0
-    return max(0, int(time.time() * 1000) - int(detected))
+    return max(0, now_ms - int(detected))
 
 
 def _signal_from_job(job: dict[str, Any]) -> "TradeSignal":

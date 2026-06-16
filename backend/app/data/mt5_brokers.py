@@ -21,6 +21,8 @@ class MT5BrokerPreset:
     path_search_terms: tuple[str, ...]
     verified: bool = False
     notes: Optional[str] = None
+    recommended_vps_regions: tuple[str, ...] = ()
+    latency_notes: Optional[str] = None
 
 
 MT5_BROKER_PRESETS: list[MT5BrokerPreset] = [
@@ -35,6 +37,8 @@ MT5_BROKER_PRESETS: list[MT5BrokerPreset] = [
         path_search_terms=("Moneta Markets", "MonetaMarkets"),
         verified=True,
         notes="Use the server name exactly as shown in your MT5 login dialog.",
+        recommended_vps_regions=("London LD4", "Singapore SG1"),
+        latency_notes="Co-locate VPS with Moneta execution servers for sub-5ms RTT.",
     ),
     MT5BrokerPreset(
         slug="ftmo",
@@ -48,6 +52,8 @@ MT5_BROKER_PRESETS: list[MT5BrokerPreset] = [
         path_search_terms=("FTMO",),
         verified=True,
         notes="FTMO also offers DXtrade (web) — pick platform DXtrade when linking that account.",
+        recommended_vps_regions=("London LD4", "New York NY4"),
+        latency_notes="FTMO MT5 servers are typically in LD4/NY4 — match your VPS region.",
     ),
     MT5BrokerPreset(
         slug="exness",
@@ -59,6 +65,8 @@ MT5_BROKER_PRESETS: list[MT5BrokerPreset] = [
         ),
         path_search_terms=("EXNESS", "Exness"),
         verified=True,
+        recommended_vps_regions=("London LD4", "Singapore SG1", "Amsterdam AMS"),
+        latency_notes="Exness demo/live servers vary by account — confirm in MT5 terminal ping.",
     ),
     MT5BrokerPreset(
         slug="fusion_markets",
@@ -82,6 +90,8 @@ MT5_BROKER_PRESETS: list[MT5BrokerPreset] = [
             "The MetaTrader 4 build is not supported by the copy engine — install "
             "MT5 from Fusion Markets if you only have MT4."
         ),
+        recommended_vps_regions=("Sydney SYD", "Singapore SG1"),
+        latency_notes="Fusion Markets AU servers — Sydney/SG VPS recommended.",
     ),
     MT5BrokerPreset(
         slug="generic",

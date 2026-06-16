@@ -9,6 +9,8 @@ export type MT5Broker = {
   terminal_installed: boolean;
   verified: boolean;
   notes: string | null;
+  recommended_vps_regions?: string[];
+  latency_notes?: string | null;
 };
 
 let cached: MT5Broker[] | null = null;

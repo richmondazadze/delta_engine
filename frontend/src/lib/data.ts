@@ -4,6 +4,7 @@ import type {
   Copier,
   DashboardSummary,
   ExecutionEvent,
+  ExecutionSlaResponse,
   RiskProfile,
 } from "./types";
 import { apiFetch } from "./api";
@@ -317,6 +318,13 @@ export type SymbolMapping = {
   is_active: boolean;
   created_at: string;
 };
+
+export async function fetchExecutionSla(token: string, hours = 24) {
+  return apiFetch<ExecutionSlaResponse>(
+    `/api/execution-events/sla?hours=${hours}`,
+    token,
+  );
+}
 
 export async function fetchSymbolMappings(token: string) {
   const data = await apiFetch<{ mappings: SymbolMapping[]; total: number }>(

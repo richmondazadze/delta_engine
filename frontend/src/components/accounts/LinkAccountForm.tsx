@@ -250,6 +250,13 @@ export function LinkAccountForm() {
                   {selectedBroker.notes}
                 </div>
               )}
+              {selectedBroker?.recommended_vps_regions &&
+                selectedBroker.recommended_vps_regions.length > 0 && (
+                  <div className="hint" style={{ marginTop: 4 }}>
+                    Recommended VPS: {selectedBroker.recommended_vps_regions.join(", ")}
+                    {selectedBroker.latency_notes ? ` — ${selectedBroker.latency_notes}` : ""}
+                  </div>
+                )}
               {selectedBroker && brokerSlug !== "custom" && (
                 <div className="hint" style={{ marginTop: 4 }}>
                   {selectedBroker.terminal_installed ? (

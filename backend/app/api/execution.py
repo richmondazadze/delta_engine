@@ -11,6 +11,7 @@ from typing import Optional
 from app.core.security import AuthUser, get_current_user
 from app.core.deps import get_supabase_admin
 from app.models.execution import ExecutionEventResponse, ExecutionEventListResponse
+from app.services.execution_sla_service import build_execution_sla
 import structlog
 
 logger = structlog.get_logger()
@@ -106,6 +107,16 @@ async def list_execution_events(
         page=page,
         per_page=limit,
     )
+
+
+@router.get("/sla")
+async def get_execution_sla(
+    current_user: AuthUser = Depends(get_current_user),
+    hours: int = Query(24, ge=1, le=168),
+):
+    """Execution SLA percentiles and breach detection for the current user."""
+    sb = get_supabase_admin()
+    return build_execution_sla(sb, current_user.user_id, hours=hours)
 
 
 @router.get("/{event_id}", response_model=ExecutionEventResponse)

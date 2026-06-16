@@ -165,9 +165,11 @@ def run_all_masters() -> None:
 
     from engine.copier_engine import CopierEngine
 
-    if len(active) <= 1:
+    always_isolate = os.environ.get("WORKER_ALWAYS_ISOLATE_MASTERS", "0") == "1"
+
+    if len(active) <= 1 and not always_isolate:
         # 0 masters -> CopierEngine.run() raises the usual descriptive error.
-        # 1 master  -> run in-process; identical to the previous behaviour.
+        # 1 master  -> run in-process unless WORKER_ALWAYS_ISOLATE_MASTERS=1.
         master_id = active[0].id if active else None
         if master_id:
             logger.info("single_master_mode", master=master_id)
