@@ -1,9 +1,10 @@
 """
 Build and apply parallel follower dispatch jobs.
 
-Every MT5 follower runs in its own warm pool subprocess (keyed by account id).
-There is no inline serial login fallback — that path blocked the master poll loop
-and added ~2s per same-terminal follower.
+MT5 followers run in warm pool subprocesses. Different terminal installs run in
+parallel; followers sharing one ``terminal64.exe`` route to a single serial worker
+per path (login switches per job). There is no inline serial fallback in the
+parent process — that blocked the master poll loop.
 """
 
 from __future__ import annotations
@@ -178,8 +179,11 @@ def dispatch_to_followers(
         for c in dxtrade:
             dx_futures.append(dx_pool.submit(_run_dx, c))
 
-    # Blocking wait is intentional backpressure — prevents SL/TP storm backlog.
-    for copier, fut in futures:
+    # NON-BLOCKING: Process completions as they arrive (parallel execution).
+    # This reduces wall time from SUM(follower_latencies) to MAX(follower_latencies).
+    copier_by_future = {fut: copier for copier, fut in futures}
+    for fut in as_completed(copier_by_future.keys()):
+        copier = copier_by_future[fut]
         try:
             result = fut.result(timeout=120)
             _apply_isolated_result(engine, result)
@@ -204,13 +208,14 @@ def dispatch_to_followers(
     if dx_pool:
         dx_pool.shutdown(wait=False)
 
+    wall_ms = int((time.perf_counter() - dispatch_t0) * 1000)
     logger.info(
         "dispatch_complete",
         event_type=signal.event_type,
         ticket=signal.ticket,
         pool=len(pool_mt5),
         dxtrade=len(dxtrade),
-        wall_ms=int((time.perf_counter() - dispatch_t0) * 1000),
+        wall_ms=wall_ms,
     )
 
 

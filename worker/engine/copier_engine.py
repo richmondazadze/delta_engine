@@ -74,7 +74,8 @@ class CopierEngine:
             os.environ.get("WORKER_CONFIG_RELOAD_SECONDS", "5")
         )
         self._sessions: Dict[str, AccountSession] = {}
-        self._terminal_pool = TerminalPool([])
+        self._terminal_pool = TerminalPool({})
+        self._pool_master_id: str | None = None
         self._rebuild_sessions()
         self._rebuild_symbol_mappings_cache()
 
@@ -146,6 +147,29 @@ class CopierEngine:
             if a.enabled
         }
 
+    def _rebuild_terminal_pool(self, master_id: str) -> None:
+        """Build or refresh follower subprocess pool for the active master."""
+        copier_list = dedupe_copiers_by_follower(
+            get_copiers_for_master(self.copiers, master_id)
+        )
+        follower_ids = {c.follower_id for c in copier_list}
+        pool_accounts: dict[str, str] = {}
+        for account in self.accounts:
+            if account.id not in follower_ids or not account.enabled:
+                continue
+            if not is_mt5(account.platform) or not account.terminal_path:
+                continue
+            pool_accounts[account.id] = normalize_terminal_path(account.terminal_path)
+
+        self._terminal_pool.shutdown()
+        self._terminal_pool = TerminalPool(pool_accounts)
+        logger.info(
+            "terminal_pool_ready",
+            followers=len(pool_accounts),
+            workers=self._terminal_pool.worker_count(),
+            accounts=list(pool_accounts.keys()),
+        )
+
     def _maybe_reload_config(self) -> None:
         if os.environ.get("DELTA_CONFIG_SOURCE", "yaml").lower() != "api":
             return
@@ -177,6 +201,8 @@ class CopierEngine:
                 copiers=len(self.copiers),
                 enabled_copiers=sum(1 for c in self.copiers if c.enabled),
             )
+            if self._pool_master_id:
+                self._rebuild_terminal_pool(self._pool_master_id)
         except Exception as exc:
             logger.warning("runtime_config_reload_failed", error=str(exc))
 
@@ -368,21 +394,8 @@ class CopierEngine:
         diff = StateDiffEngine(master_cfg.id)
         diff.bootstrap(master_source.get_open_positions())
 
-        follower_ids = {c.follower_id for c in copier_list}
-        pool_accounts: dict[str, str] = {}
-        for a in self.accounts:
-            if a.id not in follower_ids or not a.enabled:
-                continue
-            if not is_mt5(a.platform) or not a.terminal_path:
-                continue
-            pool_accounts[a.id] = normalize_terminal_path(a.terminal_path)
-        self._terminal_pool.shutdown()
-        self._terminal_pool = TerminalPool(pool_accounts)
-        logger.info(
-            "terminal_pool_ready",
-            workers=len(pool_accounts),
-            accounts=list(pool_accounts.keys()),
-        )
+        self._pool_master_id = master_cfg.id
+        self._rebuild_terminal_pool(master_cfg.id)
 
         if is_mt5(master_cfg.platform):
             bus = SignalBusReader(master_cfg.id, master_cfg.login)

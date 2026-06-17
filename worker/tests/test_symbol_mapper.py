@@ -23,6 +23,8 @@ def test_map_symbol_keeps_suffix_without_mapping():
 def test_resolve_prefers_existing_symbol():
     connector = MagicMock()
     connector.get_symbol_info.side_effect = lambda s: None if s == "EURUSD" else {"symbol": s}
+    # Prevent _resolved_symbols cache from being a MagicMock
+    connector._resolved_symbols = None
 
     mapper = SymbolMapper([])
     assert mapper.resolve_for_follower("EURUSDm", connector) == "EURUSDm"
@@ -31,6 +33,8 @@ def test_resolve_prefers_existing_symbol():
 def test_resolve_uses_explicit_mapping_when_valid():
     connector = MagicMock()
     connector.get_symbol_info.side_effect = lambda s: {"symbol": s} if s == "EURUSD" else None
+    # Prevent _resolved_symbols cache from being a MagicMock
+    connector._resolved_symbols = None
 
     mapper = SymbolMapper([SymbolMapping("EURUSDm", "EURUSD")])
     assert mapper.resolve_for_follower("EURUSDm", connector) == "EURUSD"
