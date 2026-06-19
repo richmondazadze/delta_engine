@@ -31,8 +31,10 @@ class ControlApiClient:
         self.worker_id: Optional[str] = None
         self._heartbeat_thread: Optional[threading.Thread] = None
         self._heartbeat_stop = threading.Event()
+        read_timeout = float(os.environ.get("WORKER_API_READ_TIMEOUT_SECONDS", "90"))
+        connect_timeout = float(os.environ.get("WORKER_API_CONNECT_TIMEOUT_SECONDS", "15"))
         self._http = httpx.Client(
-            timeout=httpx.Timeout(30.0, connect=5.0),
+            timeout=httpx.Timeout(read_timeout, connect=connect_timeout),
             limits=httpx.Limits(max_keepalive_connections=16, max_connections=32),
         )
         atexit.register(self.close)
@@ -60,19 +62,61 @@ class ControlApiClient:
         *,
         json: Optional[dict[str, Any]] = None,
         include_user: bool = True,
+        retries: int | None = None,
     ) -> httpx.Response:
         url = f"{self.base_url}{path}"
-        response = self._http.request(
-            method,
-            url,
-            headers=self._headers(include_user=include_user),
-            json=json,
+        max_attempts = retries if retries is not None else 1
+        retryable = (httpx.ReadTimeout, httpx.ConnectTimeout, httpx.ConnectError)
+        last_exc: Exception | None = None
+
+        for attempt in range(1, max_attempts + 1):
+            try:
+                response = self._http.request(
+                    method,
+                    url,
+                    headers=self._headers(include_user=include_user),
+                    json=json,
+                )
+                response.raise_for_status()
+                return response
+            except retryable as exc:
+                last_exc = exc
+                if attempt >= max_attempts:
+                    break
+                wait_s = min(2 ** attempt, 20)
+                logger.warning(
+                    "api_request_retry",
+                    method=method,
+                    path=path,
+                    base_url=self.base_url,
+                    attempt=attempt,
+                    max_attempts=max_attempts,
+                    wait_s=wait_s,
+                    error=str(exc),
+                )
+                time.sleep(wait_s)
+
+        assert last_exc is not None
+        logger.error(
+            "api_request_failed",
+            method=method,
+            path=path,
+            base_url=self.base_url,
+            error=str(last_exc),
+            hint=(
+                "Check API_URL is reachable and the backend is running. "
+                "Render free tier can cold-start for 60–90s on first request."
+            ),
         )
-        response.raise_for_status()
-        return response
+        raise last_exc
 
     def fetch_runtime_config(self) -> dict[str, Any]:
-        response = self._request("GET", "/internal/runtime-config")
+        attempts = int(os.environ.get("WORKER_API_RETRY_ATTEMPTS", "4"))
+        response = self._request(
+            "GET",
+            "/internal/runtime-config",
+            retries=attempts,
+        )
         return response.json()
 
     def fetch_trading_account(self, account_id: str) -> dict[str, Any]:

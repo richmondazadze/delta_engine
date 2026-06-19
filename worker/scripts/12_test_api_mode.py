@@ -247,6 +247,8 @@ def test_direct_api_copy(result: TestResult, symbol: str = "BTCUSDm") -> None:
     engine.symbol_mapper = SymbolMapper(load_symbol_mappings())
     engine.ticket_mapper = TicketMapper()
     engine._sessions = sessions
+    engine._pool_master_id = master_cfg.id
+    engine._rebuild_terminal_pool(master_cfg.id)
 
     if not engine._switch_to(master_session):
         result.fail("direct API copy", "master connect failed")
@@ -285,7 +287,7 @@ def test_direct_api_copy(result: TestResult, symbol: str = "BTCUSDm") -> None:
         return
 
     for signal in opened:
-        engine._dispatch_to_followers(signal, copier_list, master_session)
+        engine._dispatch_to_followers(signal, copier_list, master_cfg, master_session)
 
     if engine._current_session:
         engine._current_session.disconnect()

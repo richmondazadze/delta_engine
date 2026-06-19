@@ -161,7 +161,39 @@ def _spawn(ctx, master: AccountConfig, base_name: str) -> mp.process.BaseProcess
 
 def run_all_masters() -> None:
     """Entrypoint used by the production copier loop."""
-    active, accounts, copiers = discover_active_masters()
+    startup_attempts = int(os.environ.get("WORKER_STARTUP_API_ATTEMPTS", "3"))
+    last_error: Exception | None = None
+    active: list[AccountConfig] = []
+    accounts: list[AccountConfig] = []
+    copiers: list[CopierConfig] = []
+
+    for attempt in range(1, startup_attempts + 1):
+        try:
+            active, accounts, copiers = discover_active_masters()
+            last_error = None
+            break
+        except Exception as exc:
+            last_error = exc
+            if attempt >= startup_attempts:
+                break
+            wait_s = min(5 * attempt, 30)
+            logger.warning(
+                "startup_config_fetch_failed",
+                attempt=attempt,
+                max_attempts=startup_attempts,
+                wait_s=wait_s,
+                error=str(exc),
+                api_url=os.environ.get("API_URL", "http://localhost:8000"),
+            )
+            time.sleep(wait_s)
+
+    if last_error is not None:
+        raise RuntimeError(
+            "Failed to load runtime config from API after "
+            f"{startup_attempts} attempt(s): {last_error}. "
+            f"API_URL={os.environ.get('API_URL', 'http://localhost:8000')}. "
+            "If using Render, wait for cold start or run the backend locally."
+        ) from last_error
 
     from engine.copier_engine import CopierEngine
 
