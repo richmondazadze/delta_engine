@@ -8,6 +8,13 @@ from typing import Dict, List, Optional
 
 from engine.signal import PositionSnapshot, TradeSignal
 
+# Match MQL5 EA tolerance (DeltaEngineSignalBus.mq5) — avoids float noise modifies.
+_FLOAT_EPS = 1e-9
+
+
+def _float_changed(current: float, previous: float) -> bool:
+    return abs(float(current) - float(previous)) > _FLOAT_EPS
+
 
 class StateDiffEngine:
     def __init__(self, account_id: str):
@@ -52,8 +59,8 @@ class StateDiffEngine:
                     )
                 )
             else:
-                sl_changed = snap.sl != prev.sl
-                tp_changed = snap.tp != prev.tp
+                sl_changed = _float_changed(snap.sl, prev.sl)
+                tp_changed = _float_changed(snap.tp, prev.tp)
                 # Coalesce a simultaneous SL+TP edit into ONE signal. Emitting
                 # two signals doubles the cross-terminal work per follower and,
                 # because the pool runs one job at a time per terminal, the
@@ -99,7 +106,7 @@ class StateDiffEngine:
                             tp=snap.tp or None,
                         )
                     )
-                if snap.volume != prev.volume:
+                if snap.volume != prev.volume and snap.volume > _FLOAT_EPS:
                     events.append(
                         TradeSignal(
                             event_type="volume_changed",

@@ -25,6 +25,18 @@ from engine.risk_engine import RiskEngine
 
 logger = structlog.get_logger()
 
+_OPEN_OK_RETCODES: set[int] = set()
+
+
+def _open_ok_retcode(retcode: int | None) -> bool:
+    if retcode is None or mt5 is None:
+        return False
+    if not _OPEN_OK_RETCODES:
+        _OPEN_OK_RETCODES.add(mt5.TRADE_RETCODE_DONE)
+        partial = getattr(mt5, "TRADE_RETCODE_DONE_PARTIAL", 10009)
+        _OPEN_OK_RETCODES.add(partial)
+    return int(retcode) in _OPEN_OK_RETCODES
+
 
 class FollowerExecutor:
     def __init__(
@@ -211,12 +223,13 @@ class FollowerExecutor:
             )
             return False
 
-        success = result.get("retcode") == mt5.TRADE_RETCODE_DONE
+        success = _open_ok_retcode(result.get("retcode"))
         follower_ticket = (
             result.get("position_ticket")
             or result.get("order")
             or result.get("deal")
         )
+        executed_lot = float(result.get("volume") or lot) if success else 0.0
 
         if success and follower_ticket:
             self.ticket_mapper.add(
@@ -226,8 +239,10 @@ class FollowerExecutor:
                 follower_symbol,
                 signal.side,
                 follower_account_id=self.follower.account_id,
-                volume=lot,
+                volume=executed_lot or lot,
             )
+            if self.risk_engine:
+                self.risk_engine.record_open(self.follower.account_id)
 
         self._emit(
             {
@@ -240,7 +255,7 @@ class FollowerExecutor:
                 "symbol_follower": follower_symbol,
                 "side": signal.side,
                 "requested_lot": lot,
-                "executed_lot": lot if success else 0,
+                "executed_lot": executed_lot if success else 0,
                 "broker_return_code": str(result.get("retcode")),
                 "error_message": result.get("comment"),
                 **self._timing(latency_ms),
@@ -302,7 +317,13 @@ class FollowerExecutor:
         )
         latency_ms = int((time.perf_counter() - t0) * 1000)
 
-        success = result is not None and result.get("retcode") == mt5.TRADE_RETCODE_DONE
+        already_flat = result is None or (
+            result.get("comment") == "already_closed"
+            and result.get("retcode") == mt5.TRADE_RETCODE_DONE
+        )
+        success = already_flat or (
+            result is not None and result.get("retcode") == mt5.TRADE_RETCODE_DONE
+        )
         if success:
             self.ticket_mapper.remove(
                 copier.id,
@@ -322,9 +343,13 @@ class FollowerExecutor:
                 "side": link.side if link else signal.side,
                 "executed_lot": link.volume if link else None,
                 "broker_return_code": (
-                    str(result.get("retcode")) if result else None
+                    str(result.get("retcode")) if result else "already_closed"
                 ),
-                "error_message": result.get("comment") if result else "close_failed",
+                "error_message": (
+                    "position_already_flat"
+                    if already_flat
+                    else (result.get("comment") if result else "close_failed")
+                ),
                 **self._timing(latency_ms),
             }
         )
@@ -338,8 +363,20 @@ class FollowerExecutor:
             )
             return True
 
-        sl = signal.sl if copier.copy_sl and signal.sl is not None else 0.0
-        tp = signal.tp if copier.copy_tp and signal.tp is not None else 0.0
+        sl = 0.0
+        tp = 0.0
+        stops = self.follower.connector.get_position_stops(int(follower_ticket))
+        current_sl = stops[0] if stops else 0.0
+        current_tp = stops[1] if stops else 0.0
+
+        if copier.copy_sl and signal.sl is not None:
+            sl = float(signal.sl)
+        else:
+            sl = current_sl
+        if copier.copy_tp and signal.tp is not None:
+            tp = float(signal.tp)
+        else:
+            tp = current_tp
 
         link = self.ticket_mapper.get(copier.id, signal.ticket)
         t0 = time.perf_counter()

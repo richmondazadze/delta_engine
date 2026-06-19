@@ -33,7 +33,7 @@ from engine.signal_bus import SignalBusReader
 from engine.state_diff import StateDiffEngine
 from engine.symbol_mapper import SymbolMapper
 from engine.ticket_mapper import TicketMapper
-from engine.terminal_pool import TerminalPool
+from engine.terminal_pool import TerminalPool, pool_plan_fingerprint
 from engine.terminal_session_manager import get_terminal_manager, normalize_terminal_path
 
 logger = structlog.get_logger()
@@ -68,7 +68,8 @@ class CopierEngine:
         self.risk_engine: RiskEngine | None = None
         self._api_client = None
         self._current_session: AccountSession | None = None
-        self._recent_open_signals: Dict[int, float] = {}
+        self._open_in_flight: set[int] = set()
+        self._pool_fingerprint: str | None = None
         self._last_config_reload: float = 0.0
         self._config_reload_interval_s = int(
             os.environ.get("WORKER_CONFIG_RELOAD_SECONDS", "5")
@@ -161,8 +162,13 @@ class CopierEngine:
                 continue
             pool_accounts[account.id] = normalize_terminal_path(account.terminal_path)
 
+        fingerprint = pool_plan_fingerprint(pool_accounts)
+        if fingerprint == self._pool_fingerprint:
+            return
+
         self._terminal_pool.shutdown()
         self._terminal_pool = TerminalPool(pool_accounts)
+        self._pool_fingerprint = fingerprint
         logger.info(
             "terminal_pool_ready",
             followers=len(pool_accounts),
@@ -338,6 +344,21 @@ class CopierEngine:
         if not copier_list:
             raise RuntimeError(f"No enabled copiers for master {master_cfg.id}")
 
+        if (
+            os.environ.get("WORKER_PARALLEL_TERMINALS", "1") != "1"
+            and any(
+                is_mt5(get_account(self.accounts, c.follower_id).platform)
+                for c in copier_list
+            )
+        ):
+            logger.warning(
+                "parallel_terminals_disabled",
+                hint=(
+                    "WORKER_PARALLEL_TERMINALS=0 disables the follower pool; "
+                    "MT5 copies will fail with pool_worker_unavailable."
+                ),
+            )
+
         raw_count = len(get_copiers_for_master(self.copiers, master_cfg.id))
         if raw_count > len(copier_list):
             logger.warning(
@@ -466,13 +487,15 @@ class CopierEngine:
         self._mark_master_connected(master_cfg)
 
         mgr = get_terminal_manager()
+        in_grace = mgr.in_reconnect_grace()
+
         bus_signals: list = []
-        if self._signal_bus is not None:
+        if self._signal_bus is not None and not in_grace:
             bus_signals = self._signal_bus.drain()
 
         poll_signals: list = []
         if not bus_signals or self._should_poll_fallback():
-            if mgr.in_reconnect_grace():
+            if in_grace:
                 diff.resync(positions)
             else:
                 poll_signals = diff.diff(positions)
@@ -482,26 +505,34 @@ class CopierEngine:
         if signals:
             batch_t0 = time.perf_counter()
             for signal in signals:
+                dispatch_list = self._copiers_for_signal(
+                    master_cfg_id, copier_list, signal
+                )
                 if signal.event_type == "position_opened":
-                    now = time.time()
-                    last = self._recent_open_signals.get(signal.ticket)
-                    if last is not None and (now - last) < 60.0:
+                    if signal.ticket in self._open_in_flight:
                         logger.info(
-                            "signal_open_debounced",
+                            "signal_open_in_flight",
                             ticket=signal.ticket,
                             symbol=signal.symbol,
                         )
                         continue
-                    self._recent_open_signals[signal.ticket] = now
+                    if dispatch_list and all(
+                        self.ticket_mapper.has(c.id, signal.ticket)
+                        for c in dispatch_list
+                    ):
+                        logger.info(
+                            "signal_open_already_linked",
+                            ticket=signal.ticket,
+                            symbol=signal.symbol,
+                        )
+                        continue
+                    self._open_in_flight.add(signal.ticket)
 
                 logger.info(
                     "signal_detected",
                     event_type=signal.event_type,
                     ticket=signal.ticket,
                     symbol=signal.symbol,
-                )
-                dispatch_list = self._copiers_for_signal(
-                    master_cfg_id, copier_list, signal
                 )
                 try:
                     dispatch_to_followers(
@@ -520,6 +551,9 @@ class CopierEngine:
                         error=str(exc),
                         exc_info=True,
                     )
+                finally:
+                    if signal.event_type == "position_opened":
+                        self._open_in_flight.discard(signal.ticket)
 
             batch_ms = int((time.perf_counter() - batch_t0) * 1000)
             logger.info(
@@ -642,15 +676,48 @@ class CopierEngine:
             logger.warning("command_poll_failed", error=str(exc))
 
 
+_MODIFY_EVENTS = frozenset(
+    {"sl_modified", "tp_modified", "sltp_modified", "volume_changed"}
+)
+
+
 def _merge_signals(bus_signals: list, poll_signals: list) -> list:
     """Prefer EA bus events; use poll diff only for tickets not already covered."""
     if not bus_signals:
-        return poll_signals
+        return _dedupe_open_signals(poll_signals)
     if not poll_signals:
-        return bus_signals
+        return _dedupe_open_signals(bus_signals)
+
     covered = {(s.event_type, s.ticket) for s in bus_signals}
+    open_tickets = {
+        s.ticket for s in bus_signals if s.event_type == "position_opened"
+    }
+    modify_tickets = {
+        s.ticket for s in bus_signals if s.event_type in _MODIFY_EVENTS
+    }
     merged = list(bus_signals)
     for sig in poll_signals:
+        if sig.event_type == "position_opened" and sig.ticket in open_tickets:
+            continue
+        if sig.event_type in _MODIFY_EVENTS and sig.ticket in modify_tickets:
+            continue
         if (sig.event_type, sig.ticket) not in covered:
             merged.append(sig)
-    return merged
+            if sig.event_type == "position_opened":
+                open_tickets.add(sig.ticket)
+            elif sig.event_type in _MODIFY_EVENTS:
+                modify_tickets.add(sig.ticket)
+    return _dedupe_open_signals(merged)
+
+
+def _dedupe_open_signals(signals: list) -> list:
+    """Keep at most one position_opened per ticket (first wins)."""
+    seen_open: set[int] = set()
+    out: list = []
+    for sig in signals:
+        if sig.event_type == "position_opened":
+            if sig.ticket in seen_open:
+                continue
+            seen_open.add(sig.ticket)
+        out.append(sig)
+    return out

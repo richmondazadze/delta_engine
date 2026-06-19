@@ -76,6 +76,19 @@ class SignalBusReader:
         if not self.path.is_file():
             return []
 
+        try:
+            size = self.path.stat().st_size
+            if size < self._offset:
+                logger.warning(
+                    "signal_bus_truncated",
+                    path=str(self.path),
+                    old_offset=self._offset,
+                    new_size=size,
+                )
+                self._offset = 0
+        except OSError:
+            pass
+
         signals: list[TradeSignal] = []
         try:
             with open(self.path, "r", encoding="utf-8", errors="replace") as f:

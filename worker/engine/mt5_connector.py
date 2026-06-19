@@ -446,8 +446,12 @@ class MT5Connector:
 
         position = mt5.positions_get(ticket=ticket)
         if position is None or len(position) == 0:
-            logger.error("mt5_close_position_not_found", ticket=ticket)
-            return result if symbol and volume and side else None
+            logger.info("mt5_close_position_already_flat", ticket=ticket)
+            return {
+                "retcode": mt5.TRADE_RETCODE_DONE,
+                "comment": "already_closed",
+                "position": ticket,
+            }
 
         pos = position[0]
         return _send_close(
@@ -508,6 +512,16 @@ class MT5Connector:
 
         return out_sl, out_tp
 
+    def get_position_stops(self, ticket: int) -> tuple[float, float] | None:
+        """Return current SL/TP for an open position, or None if flat."""
+        if mt5 is None:
+            return None
+        position = mt5.positions_get(ticket=int(ticket))
+        if position is None or len(position) == 0:
+            return None
+        pos = position[0]
+        return float(getattr(pos, "sl", 0) or 0), float(getattr(pos, "tp", 0) or 0)
+
     def modify_position(
         self,
         ticket: int,
@@ -560,7 +574,8 @@ class MT5Connector:
         if result is None:
             logger.error("mt5_modify_order_send_none", ticket=ticket, error=mt5.last_error())
             return None
-        if result.retcode != mt5.TRADE_RETCODE_DONE:
+        ok_codes = {mt5.TRADE_RETCODE_DONE, mt5.TRADE_RETCODE_NO_CHANGES}
+        if result.retcode not in ok_codes:
             logger.error("mt5_modify_position_failed", result=result._asdict())
             return result._asdict()
 
@@ -569,5 +584,6 @@ class MT5Connector:
             ticket=ticket,
             sl=clamped_sl,
             tp=clamped_tp,
+            retcode=result.retcode,
         )
         return result._asdict()

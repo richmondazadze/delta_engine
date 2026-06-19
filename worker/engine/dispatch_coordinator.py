@@ -125,11 +125,15 @@ def dispatch_to_followers(
             else None
         )
         submitted_at_ms = int(time.time() * 1000)
+        sig_dict = _signal_dict(signal, master_cfg.id)
+        # Per-follower age clock — queued followers on a shared terminal path
+        # should not inherit staleness from earlier siblings in the batch.
+        sig_dict["timestamp_ms"] = submitted_at_ms
         job = {
             "terminal_path": normalize_terminal_path(follower_cfg.terminal_path),
             "follower": _account_dict(follower_cfg),
             "copier": _copier_dict(copier),
-            "signal": _signal_dict(signal, master_cfg.id),
+            "signal": sig_dict,
             "symbol_mappings": symbol_mappings,
             "detected_at_ms": detected_at_ms,
             "submitted_at_ms": submitted_at_ms,
@@ -233,6 +237,8 @@ def _apply_isolated_result(engine: "CopierEngine", result: dict[str, Any]) -> No
             follower_account_id=link.get("follower_account_id"),
             volume=link.get("volume"),
         )
+        if engine.risk_engine and link.get("follower_account_id"):
+            engine.risk_engine.record_open(str(link["follower_account_id"]))
     rem = result.get("ticket_remove")
     if rem:
         engine.ticket_mapper.remove(

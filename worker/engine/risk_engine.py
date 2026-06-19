@@ -94,3 +94,10 @@ class RiskEngine:
             )
 
         return RiskDecision(allowed=True)
+
+    def record_open(self, follower_account_id: str) -> None:
+        """Increment local daily trade counter after a successful open."""
+        profile = self._profiles.get(follower_account_id)
+        if not profile:
+            return
+        profile["daily_trades_count"] = int(profile.get("daily_trades_count") or 0) + 1

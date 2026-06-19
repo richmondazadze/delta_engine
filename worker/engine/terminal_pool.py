@@ -16,6 +16,8 @@ own portable MT5 folder and unique ``terminal_path`` in the database.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 from concurrent.futures import Future, ProcessPoolExecutor
 from typing import Any
@@ -32,6 +34,8 @@ SHARED_PREFIX = "shared:"
 
 def build_pool_plan(
     account_paths: dict[str, str],
+    *,
+    log_shared: bool = True,
 ) -> tuple[dict[str, str], dict[str, str]]:
     """Return (pool_key → terminal_path, account_id → pool_key)."""
     by_path: dict[str, list[str]] = {}
@@ -45,6 +49,18 @@ def build_pool_plan(
     account_routes: dict[str, str] = {}
 
     force_dedicated = os.environ.get("WORKER_DEDICATED_POOL_PER_ACCOUNT", "0") == "1"
+    if force_dedicated:
+        shared_paths = [p for p, aids in by_path.items() if len(aids) > 1]
+        if shared_paths:
+            logger.warning(
+                "terminal_pool_dedicated_mode_shared_paths",
+                paths=len(shared_paths),
+                hint=(
+                    "WORKER_DEDICATED_POOL_PER_ACCOUNT=1 with multiple accounts on "
+                    "the same terminal path spawns conflicting MT5 processes. Use "
+                    "unique portable installs per account or disable this flag."
+                ),
+            )
 
     for path, account_ids in by_path.items():
         if len(account_ids) == 1 or force_dedicated:
@@ -56,18 +72,30 @@ def build_pool_plan(
             pool_workers[pool_key] = path
             for account_id in account_ids:
                 account_routes[account_id] = pool_key
-            logger.info(
-                "terminal_pool_shared_path",
-                path=path,
-                accounts=len(account_ids),
-                hint=(
-                    "Multiple followers share one terminal install; copies on this "
-                    "path run serially. Use a unique portable MT5 path per account "
-                    "for parallel execution."
-                ),
-            )
+            if log_shared:
+                logger.info(
+                    "terminal_pool_shared_path",
+                    path=path,
+                    accounts=len(account_ids),
+                    hint=(
+                        "Multiple followers share one terminal install; copies on this "
+                        "path run serially. Use a unique portable MT5 path per account "
+                        "for parallel execution."
+                    ),
+                )
 
     return pool_workers, account_routes
+
+
+def pool_plan_fingerprint(account_paths: dict[str, str]) -> str:
+    """Stable hash of routing plan — skip pool rebuild when unchanged."""
+    pool_workers, account_routes = build_pool_plan(account_paths, log_shared=False)
+    payload = {
+        "workers": sorted(pool_workers.items()),
+        "routes": sorted(account_routes.items()),
+    }
+    raw = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(raw.encode()).hexdigest()[:16]
 
 
 class TerminalPool:

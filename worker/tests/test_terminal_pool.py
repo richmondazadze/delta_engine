@@ -1,7 +1,7 @@
 """Tests for terminal pool routing (shared path vs dedicated workers)."""
 
 import os
-from engine.terminal_pool import SHARED_PREFIX, build_pool_plan
+from engine.terminal_pool import SHARED_PREFIX, build_pool_plan, pool_plan_fingerprint
 from engine.terminal_session_manager import normalize_terminal_path
 
 
@@ -51,3 +51,10 @@ def test_build_pool_plan_mixed_shared_and_dedicated():
     assert routes["ex-1"] == shared_key
     assert routes["ex-2"] == shared_key
     assert routes["ftmo-1"] == "ftmo-1"
+
+
+def test_pool_fingerprint_changes_when_routing_changes():
+    base = {"a": "C:/MT5/shared/terminal64.exe", "b": "C:/MT5/shared/terminal64.exe"}
+    unique = {"a": "C:/MT5/a/terminal64.exe", "b": "C:/MT5/b/terminal64.exe"}
+    assert pool_plan_fingerprint(base) != pool_plan_fingerprint(unique)
+
